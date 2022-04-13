@@ -61,13 +61,15 @@ func resizeWindow(w fyne.Window) {
 	w.Resize(fyne.NewSize(375, 200))
 }
 
+// returns nil if provided length is within boundaries
+// or an error if this is not the case.
 func lengthValidator(s string) error {
 	len, err := strconv.Atoi(s)
 	if err != nil {
 		return err
 	}
 	if len < 0 || len > MAX_LENGTH {
-		return fmt.Errorf("password length must be between 1 and 99")
+		return fmt.Errorf("password length must be between 1 and %d", MAX_LENGTH)
 	}
 	return nil
 }
