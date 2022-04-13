@@ -1,39 +1,9 @@
-﻿# go-cli-template
+# password-generator [![Test](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
 
-Template for small [Go](https://www.golang.org) CLI projects.
+Fyne GUI password generator written in [Go](https://www.golang.org).
 
-## Get started
+Inspired from:
 
-Name your project:
-~~~
-set OWNER=owner
-set PROJECT=my-project
-~~~
+* https://github.com/gocoder-ai/password-generator
+* https://www.socketloop.com/tutorials/golang-how-to-generate-random-string
 
-Create repository and project folder with [Github CLI](https://github.com/cli/cli):
-~~~
-gh repo create %PROJECT% --confirm --public --template github.com/tischda/go-cli-template
-cd %PROJECT%
-git remote set-url origin git@github.com:%OWNER%/%PROJECT%.git
-go mod init github.com/%OWNER%/%PROJECT%
-go generate template.go
-~~~
-
-Start coding.
-
-## Add modules
-
-~~~
-go mod tidy
-go mod vendor
-~~~
-
-## Release project
-
-~~~
-make test
-
-git tag -a v1.0.0 -m "First release"
-git push origin v1.0.0
-make release
-~~~
