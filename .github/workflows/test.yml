@@ -5,7 +5,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.17.x]
+        go-version: [1.18.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -21,10 +21,11 @@ jobs:
   test-cache:
     runs-on: ubuntu-latest
     steps:
-    - name: Install Go
+    - name: Install Go and OpenGL
       uses: actions/setup-go@v2
+      uses: openrndr/setup-opengl@v1.1
       with:
-        go-version: 1.17.x
+        go-version: 1.18.x
     - name: Checkout code
       uses: actions/checkout@v2
     - uses: actions/cache@v2
