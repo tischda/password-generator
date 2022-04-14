@@ -13,6 +13,8 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ matrix.go-version }}
+    - name: Install OpenGL
+      uses: openrndr/setup-opengl@v1.1
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Test
