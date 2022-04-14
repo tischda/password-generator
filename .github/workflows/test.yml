@@ -6,11 +6,11 @@ jobs:
     strategy:
       matrix:
         go-version: [1.18.x]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
     - name: Install Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go-version }}
 
@@ -19,7 +19,7 @@ jobs:
       if: ${{ runner.os == 'Linux' }}
 
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Test
       run: go test ./...
@@ -28,18 +28,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Install Go
-      uses: actions/setup-go@v2      
+      uses: actions/setup-go@v3      
       with:
         go-version: 1.18.x
 
     - name: Install OpenGL
-      run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils libgl1 libgl1-mesa-dev
       if: ${{ runner.os == 'Linux' }}
-
+      run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils libgl1 libgl1-mesa-dev
+      
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       with:
         # In order:
         # * Module download cache
