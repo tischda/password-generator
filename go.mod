@@ -1,4 +1,4 @@
-module github.com/gocoder-ai/password-generator
+module github.com/tischda/password-generator
 
 go 1.18
 

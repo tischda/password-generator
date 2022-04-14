@@ -1,6 +1,6 @@
 # password-generator [![Test](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
 
-Fyne GUI password generator written in [Go](https://www.golang.org).
+Password generator written in [Go](https://www.golang.org).
 
 Inspired from:
 
