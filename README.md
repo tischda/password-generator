@@ -32,3 +32,18 @@ Inspired from:
 
 * https://github.com/gocoder-ai/password-generator
 * https://www.socketloop.com/tutorials/golang-how-to-generate-random-string
+
+### Compile:
+
+This project has a dependency on [Fyne](https://github.com/fyne-io/fyne).
+You need to install these additional packages:
+
+Alpine:
+~~~
+sudo apk add mesa mesa-dev mesa-dri-nouveau libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev linux-headers
+~~~
+
+Ubuntu:
+~~~
+sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils libgl1 libgl1-mesa-dev
+~~~
