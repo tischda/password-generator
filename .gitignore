@@ -1,3 +1,4 @@
 *.exe
 dist/
 releaseinfo
+password-generator

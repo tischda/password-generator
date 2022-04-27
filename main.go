@@ -1,75 +1,54 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"image/color"
-	"strconv"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/widget"
+	"log"
+	"os"
 )
 
+const PROG_NAME string = "password-generator"
 const DEFAULT_LENGTH int = 20
-const MAX_LENGTH int = 99
+
+var version string
+
+var flag_help = flag.Bool("help", false, "displays this help message")
+var flag_version = flag.Bool("version", false, "print version and exit")
+var flag_length = flag.Int("length", DEFAULT_LENGTH, fmt.Sprintf("%s%d", "password length between 1 and ", MAX_LENGTH))
+var flag_gui = flag.Bool("gui", false, "show GUI")
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [option]\n", os.Args[0])
+		fmt.Fprint(os.Stderr, "\n OPTIONS:\n")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+}
 
 func main() {
-	a := app.New()
-	w := a.NewWindow("Password Generator")
+	log.SetFlags(0)
 
-	title := canvas.NewText("Password length:", color.White)
-	title.Alignment = fyne.TextAlignCenter
-
-	input := widget.NewEntry()
-	input.Text = strconv.Itoa(DEFAULT_LENGTH)
-	input.Validator = lengthValidator
-
-	text := canvas.NewText("", color.White)
-	text.Alignment = fyne.TextAlignCenter
-
-	btn := widget.NewButton("Generate password", func() {
-		err := input.Validate()
-		if err != nil {
-			text.Text = err.Error()
-		} else {
-			passwordLength, _ := strconv.Atoi(input.Text)
-			text.Text = GeneratePassword(passwordLength)
-			w.Clipboard().SetContent(text.Text)
-		}
-		text.Refresh()
-		resizeWindow(w)
-	})
-
-	content := container.New(
-		layout.NewVBoxLayout(),
-		layout.NewSpacer(),
-		title,
-		fyne.NewContainerWithLayout(layout.NewCenterLayout(), input),
-		text,
-		btn,
-		layout.NewSpacer())
-
-	w.SetContent(content)
-	resizeWindow(w)
-	w.ShowAndRun()
+	flag.Parse()
+	if flag.Arg(0) == "version" || *flag_version {
+		fmt.Printf("%s version %s\n", PROG_NAME, version)
+		return
+	}
+	if *flag_help {
+		flag.Usage()
+	}
+	if *flag_gui {
+		processGUI()
+	} else {
+		processCLI()
+	}
 }
 
-func resizeWindow(w fyne.Window) {
-	w.Resize(fyne.NewSize(375, 200))
-}
-
-// returns nil if provided length is within boundaries
-// or an error if this is not the case.
-func lengthValidator(s string) error {
-	len, err := strconv.Atoi(s)
+func processCLI() {
+	err := checkLength(*flag_length)
 	if err != nil {
-		return err
+		fmt.Fprintln(os.Stderr, "Error:", err)
+	} else {
+		fmt.Println(GeneratePassword(*flag_length))
 	}
-	if len < 0 || len > MAX_LENGTH {
-		return fmt.Errorf("password length must be between 1 and %d", MAX_LENGTH)
-	}
-	return nil
 }
