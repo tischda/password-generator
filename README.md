@@ -47,3 +47,17 @@ Ubuntu:
 ~~~
 sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils libgl1 libgl1-mesa-dev
 ~~~
+
+CentOS 8:
+~~~
+sudo yum install -y mesa-libGL mesa-libGL-devel mesa-dri-drivers libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXxf86vm-devel make golang
+~~~
+
+CentOS 9:
+~~~
+sudo yum install -y yum-utils
+sudo yum-config-manager --set-enabled crb
+sudo yum install mesa-dri-drivers mesa-libGL-devel libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXxf86vm-devel
+~~~
+
+libXxf86vm-devel is only available in the CodeReady Linux Builder (CRB) repository.
