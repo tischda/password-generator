@@ -1,4 +1,4 @@
-// +build android ios mobile
+//go:build android || ios || mobile
 
 package app
 

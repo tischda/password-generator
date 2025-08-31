@@ -81,11 +81,10 @@ static void swapIntervalNSGL(int interval)
     @autoreleasepool {
 
     _GLFWwindow* window = _glfwPlatformGetTls(&_glfw.contextSlot);
-    if (window)
-    {
-        [window->context.nsgl.object setValues:&interval
-                                  forParameter:NSOpenGLContextParameterSwapInterval];
-    }
+    assert(window != NULL);
+
+    [window->context.nsgl.object setValues:&interval
+                              forParameter:NSOpenGLContextParameterSwapInterval];
 
     } // autoreleasepool
 }
@@ -162,7 +161,7 @@ GLFWbool _glfwCreateContextNSGL(_GLFWwindow* window,
     if (ctxconfig->client == GLFW_OPENGL_ES_API)
     {
         _glfwInputError(GLFW_API_UNAVAILABLE,
-                        "NSGL: OpenGL ES is not available on macOS");
+                        "NSGL: OpenGL ES is not available via NSGL");
         return GLFW_FALSE;
     }
 
@@ -365,7 +364,7 @@ GLFWAPI id glfwGetNSGLContext(GLFWwindow* handle)
     _GLFWwindow* window = (_GLFWwindow*) handle;
     _GLFW_REQUIRE_INIT_OR_RETURN(nil);
 
-    if (window->context.client == GLFW_NO_API)
+    if (window->context.source != GLFW_NATIVE_CONTEXT_API)
     {
         _glfwInputError(GLFW_NO_WINDOW_CONTEXT, NULL);
         return nil;

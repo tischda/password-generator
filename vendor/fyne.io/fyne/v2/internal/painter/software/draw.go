@@ -3,16 +3,15 @@ package software
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/internal"
 	"fyne.io/fyne/v2/internal/painter"
+	"fyne.io/fyne/v2/internal/scale"
 	"fyne.io/fyne/v2/theme"
 
-	"github.com/goki/freetype"
-	"github.com/goki/freetype/truetype"
 	"golang.org/x/image/draw"
 )
 
@@ -23,9 +22,9 @@ type gradient interface {
 
 func drawCircle(c fyne.Canvas, circle *canvas.Circle, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
 	pad := painter.VectorPad(circle)
-	scaledWidth := internal.ScaleInt(c, circle.Size().Width+pad*2)
-	scaledHeight := internal.ScaleInt(c, circle.Size().Height+pad*2)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X-pad), internal.ScaleInt(c, pos.Y-pad)
+	scaledWidth := scale.ToScreenCoordinate(c, circle.Size().Width+pad*2)
+	scaledHeight := scale.ToScreenCoordinate(c, circle.Size().Height+pad*2)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X-pad), scale.ToScreenCoordinate(c, pos.Y-pad)
 	bounds := clip.Intersect(image.Rect(scaledX, scaledY, scaledX+scaledWidth, scaledY+scaledHeight))
 
 	raw := painter.DrawCircle(circle, pad, func(in float32) float32 {
@@ -45,10 +44,10 @@ func drawCircle(c fyne.Canvas, circle *canvas.Circle, pos fyne.Position, base *i
 
 func drawGradient(c fyne.Canvas, g gradient, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
 	bounds := g.Size()
-	width := internal.ScaleInt(c, bounds.Width)
-	height := internal.ScaleInt(c, bounds.Height)
+	width := scale.ToScreenCoordinate(c, bounds.Width)
+	height := scale.ToScreenCoordinate(c, bounds.Height)
 	tex := g.Generate(width, height)
-	drawTex(internal.ScaleInt(c, pos.X), internal.ScaleInt(c, pos.Y), width, height, base, tex, clip)
+	drawTex(scale.ToScreenCoordinate(c, pos.X), scale.ToScreenCoordinate(c, pos.Y), width, height, base, tex, clip, 1.0)
 }
 
 func drawImage(c fyne.Canvas, img *canvas.Image, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
@@ -56,14 +55,14 @@ func drawImage(c fyne.Canvas, img *canvas.Image, pos fyne.Position, base *image.
 	if bounds.IsZero() {
 		return
 	}
-	width := internal.ScaleInt(c, bounds.Width)
-	height := internal.ScaleInt(c, bounds.Height)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X), internal.ScaleInt(c, pos.Y)
+	width := scale.ToScreenCoordinate(c, bounds.Width)
+	height := scale.ToScreenCoordinate(c, bounds.Height)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X), scale.ToScreenCoordinate(c, pos.Y)
 
 	origImg := painter.PaintImage(img, c, width, height)
 
 	if img.FillMode == canvas.ImageFillContain {
-		imgAspect := painter.GetAspect(img)
+		imgAspect := img.Aspect()
 		objAspect := float32(width) / float32(height)
 
 		if objAspect > imgAspect {
@@ -77,13 +76,13 @@ func drawImage(c fyne.Canvas, img *canvas.Image, pos fyne.Position, base *image.
 		}
 	}
 
-	drawPixels(scaledX, scaledY, width, height, img.ScaleMode, base, origImg, clip)
+	drawPixels(scaledX, scaledY, width, height, img.ScaleMode, base, origImg, clip, img.Alpha())
 }
 
-func drawPixels(x, y, width, height int, mode canvas.ImageScale, base *image.NRGBA, origImg image.Image, clip image.Rectangle) {
+func drawPixels(x, y, width, height int, mode canvas.ImageScale, base *image.NRGBA, origImg image.Image, clip image.Rectangle, alpha float64) {
 	if origImg.Bounds().Dx() == width && origImg.Bounds().Dy() == height {
 		// do not scale or duplicate image since not needed, draw directly
-		drawTex(x, y, width, height, base, origImg, clip)
+		drawTex(x, y, width, height, base, origImg, clip, alpha)
 		return
 	}
 
@@ -101,14 +100,14 @@ func drawPixels(x, y, width, height int, mode canvas.ImageScale, base *image.NRG
 		draw.CatmullRom.Scale(scaledImg, scaledBounds, origImg, origImg.Bounds(), draw.Over, nil)
 	}
 
-	drawTex(x, y, width, height, base, scaledImg, clip)
+	drawTex(x, y, width, height, base, scaledImg, clip, alpha)
 }
 
 func drawLine(c fyne.Canvas, line *canvas.Line, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
 	pad := painter.VectorPad(line)
-	scaledWidth := internal.ScaleInt(c, line.Size().Width+pad*2)
-	scaledHeight := internal.ScaleInt(c, line.Size().Height+pad*2)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X-pad), internal.ScaleInt(c, pos.Y-pad)
+	scaledWidth := scale.ToScreenCoordinate(c, line.Size().Width+pad*2)
+	scaledHeight := scale.ToScreenCoordinate(c, line.Size().Height+pad*2)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X-pad), scale.ToScreenCoordinate(c, pos.Y-pad)
 	bounds := clip.Intersect(image.Rect(scaledX, scaledY, scaledX+scaledWidth, scaledY+scaledHeight))
 
 	raw := painter.DrawLine(line, pad, func(in float32) float32 {
@@ -126,36 +125,31 @@ func drawLine(c fyne.Canvas, line *canvas.Line, pos fyne.Position, base *image.N
 	draw.Draw(base, bounds, raw, image.Point{offX, offY}, draw.Over)
 }
 
-func drawTex(x, y, width, height int, base *image.NRGBA, tex image.Image, clip image.Rectangle) {
+func drawTex(x, y, width, height int, base *image.NRGBA, tex image.Image, clip image.Rectangle, alpha float64) {
 	outBounds := image.Rect(x, y, x+width, y+height)
 	clippedBounds := clip.Intersect(outBounds)
 	srcPt := image.Point{X: clippedBounds.Min.X - outBounds.Min.X, Y: clippedBounds.Min.Y - outBounds.Min.Y}
-	draw.Draw(base, clippedBounds, tex, srcPt, draw.Over)
+	if alpha == 1.0 {
+		draw.Draw(base, clippedBounds, tex, srcPt, draw.Over)
+	} else {
+		mask := &image.Uniform{C: color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: uint8(float64(0xff) * alpha)}}
+		draw.DrawMask(base, clippedBounds, tex, srcPt, mask, srcPt, draw.Over)
+	}
 }
 
 func drawText(c fyne.Canvas, text *canvas.Text, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
 	bounds := text.MinSize()
-	width := internal.ScaleInt(c, bounds.Width)
-	height := internal.ScaleInt(c, bounds.Height)
+	width := scale.ToScreenCoordinate(c, bounds.Width+painter.VectorPad(text))
+	height := scale.ToScreenCoordinate(c, bounds.Height)
 	txtImg := image.NewRGBA(image.Rect(0, 0, width, height))
 
 	color := text.Color
 	if color == nil {
-		color = theme.ForegroundColor()
+		color = theme.Color(theme.ColorNameForeground)
 	}
 
-	var opts truetype.Options
-	fontSize := text.TextSize * c.Scale()
-	opts.Size = float64(fontSize)
-	opts.DPI = painter.TextDPI
-	face := painter.CachedFontFace(text.TextStyle, &opts)
-
-	d := painter.FontDrawer{}
-	d.Dst = txtImg
-	d.Src = &image.Uniform{C: color}
-	d.Face = face
-	d.Dot = freetype.Pt(0, height-face.Metrics().Descent.Ceil())
-	d.DrawString(text.Text, text.TextStyle.TabWidth)
+	face := painter.CachedFontFace(text.TextStyle, text.FontSource, text)
+	painter.DrawString(txtImg, text.Text, color, face.Fonts, text.TextSize, c.Scale(), text.TextStyle)
 
 	size := text.Size()
 	offsetX := float32(0)
@@ -169,8 +163,8 @@ func drawText(c fyne.Canvas, text *canvas.Text, pos fyne.Position, base *image.N
 	if size.Height > bounds.Height {
 		offsetY = (size.Height - bounds.Height) / 2
 	}
-	scaledX := internal.ScaleInt(c, pos.X+offsetX)
-	scaledY := internal.ScaleInt(c, pos.Y+offsetY)
+	scaledX := scale.ToScreenCoordinate(c, pos.X+offsetX)
+	scaledY := scale.ToScreenCoordinate(c, pos.Y+offsetY)
 	imgBounds := image.Rect(scaledX, scaledY, scaledX+width, scaledY+height)
 	clippedBounds := clip.Intersect(imgBounds)
 	srcPt := image.Point{X: clippedBounds.Min.X - imgBounds.Min.X, Y: clippedBounds.Min.Y - imgBounds.Min.Y}
@@ -182,23 +176,23 @@ func drawRaster(c fyne.Canvas, rast *canvas.Raster, pos fyne.Position, base *ima
 	if bounds.IsZero() {
 		return
 	}
-	width := internal.ScaleInt(c, bounds.Width)
-	height := internal.ScaleInt(c, bounds.Height)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X), internal.ScaleInt(c, pos.Y)
+	width := scale.ToScreenCoordinate(c, bounds.Width)
+	height := scale.ToScreenCoordinate(c, bounds.Height)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X), scale.ToScreenCoordinate(c, pos.Y)
 
 	pix := rast.Generator(width, height)
 	if pix.Bounds().Bounds().Dx() != width || pix.Bounds().Dy() != height {
-		drawPixels(scaledX, scaledY, width, height, rast.ScaleMode, base, pix, clip)
+		drawPixels(scaledX, scaledY, width, height, rast.ScaleMode, base, pix, clip, 1.0)
 	} else {
-		drawTex(scaledX, scaledY, width, height, base, pix, clip)
+		drawTex(scaledX, scaledY, width, height, base, pix, clip, 1.0)
 	}
 }
 
 func drawRectangleStroke(c fyne.Canvas, rect *canvas.Rectangle, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
 	pad := painter.VectorPad(rect)
-	scaledWidth := internal.ScaleInt(c, rect.Size().Width+pad*2)
-	scaledHeight := internal.ScaleInt(c, rect.Size().Height+pad*2)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X-pad), internal.ScaleInt(c, pos.Y-pad)
+	scaledWidth := scale.ToScreenCoordinate(c, rect.Size().Width+pad*2)
+	scaledHeight := scale.ToScreenCoordinate(c, rect.Size().Height+pad*2)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X-pad), scale.ToScreenCoordinate(c, pos.Y-pad)
 	bounds := clip.Intersect(image.Rect(scaledX, scaledY, scaledX+scaledWidth, scaledY+scaledHeight))
 
 	raw := painter.DrawRectangle(rect, pad, func(in float32) float32 {
@@ -217,14 +211,14 @@ func drawRectangleStroke(c fyne.Canvas, rect *canvas.Rectangle, pos fyne.Positio
 }
 
 func drawRectangle(c fyne.Canvas, rect *canvas.Rectangle, pos fyne.Position, base *image.NRGBA, clip image.Rectangle) {
-	if rect.StrokeColor != nil && rect.StrokeWidth > 0 { // use a rasterizer if there is a stroke
+	if (rect.StrokeColor != nil && rect.StrokeWidth > 0) || rect.CornerRadius != 0 { // use a rasterizer if there is a stroke or radius
 		drawRectangleStroke(c, rect, pos, base, clip)
 		return
 	}
 
-	scaledWidth := internal.ScaleInt(c, rect.Size().Width)
-	scaledHeight := internal.ScaleInt(c, rect.Size().Height)
-	scaledX, scaledY := internal.ScaleInt(c, pos.X), internal.ScaleInt(c, pos.Y)
+	scaledWidth := scale.ToScreenCoordinate(c, rect.Size().Width)
+	scaledHeight := scale.ToScreenCoordinate(c, rect.Size().Height)
+	scaledX, scaledY := scale.ToScreenCoordinate(c, pos.X), scale.ToScreenCoordinate(c, pos.Y)
 	bounds := clip.Intersect(image.Rect(scaledX, scaledY, scaledX+scaledWidth, scaledY+scaledHeight))
 	draw.Draw(base, bounds, image.NewUniform(rect.FillColor), image.Point{}, draw.Over)
 }

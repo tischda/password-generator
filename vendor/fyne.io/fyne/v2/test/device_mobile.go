@@ -1,4 +1,4 @@
-// +build mobile
+//go:build mobile
 
 package test
 

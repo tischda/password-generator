@@ -1,4 +1,4 @@
-// +build ios
+//go:build ios
 
 package mobile
 

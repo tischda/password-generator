@@ -1,17 +1,19 @@
 package common
 
 import (
-	"runtime"
-	"sync"
-	"sync/atomic"
+	"image/color"
+	"reflect"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/internal"
 	"fyne.io/fyne/v2/internal/app"
 	"fyne.io/fyne/v2/internal/async"
 	"fyne.io/fyne/v2/internal/cache"
 	"fyne.io/fyne/v2/internal/driver"
 	"fyne.io/fyne/v2/internal/painter/gl"
+	"fyne.io/fyne/v2/internal/theme"
 )
 
 // SizeableCanvas defines a canvas with size related functions.
@@ -23,8 +25,6 @@ type SizeableCanvas interface {
 
 // Canvas defines common canvas implementation.
 type Canvas struct {
-	sync.RWMutex
-
 	OnFocus   func(obj fyne.Focusable)
 	OnUnfocus func()
 
@@ -38,17 +38,16 @@ type Canvas struct {
 
 	painter gl.Painter
 
-	// Any object that requestes to enter to the refresh queue should
+	// Any object that requests to enter to the refresh queue should
 	// not be omitted as it is always a rendering task's decision
 	// for skipping frames or drawing calls.
 	//
 	// If an object failed to ender the refresh queue, the object may
 	// disappear or blink from the view at any frames. As of this reason,
-	// the refreshQueue is an unbounded channel which is bale to cache
+	// the refreshQueue is an unbounded queue which is able to cache
 	// arbitrary number of fyne.CanvasObject for the rendering.
-	refreshQueue *async.UnboundedCanvasObjectChan
-	refreshCount uint32 // atomic
-	dirty        uint32 // atomic
+	refreshQueue *async.CanvasObjectQueue
+	dirty        bool
 
 	mWindowHeadTree, contentTree, menuTree *renderCacheTree
 }
@@ -58,6 +57,27 @@ func (c *Canvas) AddShortcut(shortcut fyne.Shortcut, handler func(shortcut fyne.
 	c.shortcut.AddShortcut(shortcut, handler)
 }
 
+func (c *Canvas) DrawDebugOverlay(obj fyne.CanvasObject, pos fyne.Position, size fyne.Size) {
+	switch obj.(type) {
+	case fyne.Widget:
+		r := canvas.NewRectangle(color.Transparent)
+		r.StrokeColor = color.NRGBA{R: 0xcc, G: 0x33, B: 0x33, A: 0xff}
+		r.StrokeWidth = 1
+		r.Resize(obj.Size())
+		c.Painter().Paint(r, pos, size)
+
+		t := canvas.NewText(reflect.ValueOf(obj).Elem().Type().Name(), r.StrokeColor)
+		t.TextSize = 10
+		c.Painter().Paint(t, pos.AddXY(2, 2), size)
+	case *fyne.Container:
+		r := canvas.NewRectangle(color.Transparent)
+		r.StrokeColor = color.NRGBA{R: 0x33, G: 0x33, B: 0xcc, A: 0xff}
+		r.StrokeWidth = 1
+		r.Resize(obj.Size())
+		c.Painter().Paint(r, pos, size)
+	}
+}
+
 // EnsureMinSize ensure canvas min size.
 //
 // This function uses lock.
@@ -65,53 +85,64 @@ func (c *Canvas) EnsureMinSize() bool {
 	if c.impl.Content() == nil {
 		return false
 	}
-	var lastParent fyne.CanvasObject
-
 	windowNeedsMinSizeUpdate := false
 	csize := c.impl.Size()
 	min := c.impl.MinSize()
 
-	ensureMinSize := func(node *RenderCacheNode) {
+	var parentNeedingUpdate *RenderCacheNode
+
+	setup := func(node *RenderCacheNode, pos fyne.Position) {
+		if !node.obj.Visible() {
+			return
+		}
+		if th, ok := node.Obj().(*container.ThemeOverride); ok {
+			theme.PushRenderingTheme(th.Theme)
+		}
+	}
+	ensureMinSize := func(node *RenderCacheNode, pos fyne.Position) {
 		obj := node.obj
-		cache.SetCanvasForObject(obj, c.impl)
+		cache.SetCanvasForObject(obj, c.impl, func() {
+			if img, ok := obj.(*canvas.Image); ok {
+				img.Refresh() // this may now have a different texScale
+			}
+		})
+
+		if parentNeedingUpdate == node {
+			c.updateLayout(obj)
+			parentNeedingUpdate = nil
+		}
 
 		if !obj.Visible() {
 			return
 		}
 		minSize := obj.MinSize()
+
 		minSizeChanged := node.minSize != minSize
 		if minSizeChanged {
-			objToLayout := obj
 			node.minSize = minSize
 			if node.parent != nil {
-				objToLayout = node.parent.obj
+				parentNeedingUpdate = node.parent
 			} else {
 				windowNeedsMinSizeUpdate = true
 				size := obj.Size()
 				expectedSize := minSize.Max(size)
 				if expectedSize != size && size != csize {
-					objToLayout = nil
 					obj.Resize(expectedSize)
+				} else {
+					c.updateLayout(obj)
 				}
 			}
+		}
 
-			if objToLayout != lastParent {
-				updateLayout(lastParent)
-				lastParent = objToLayout
-			}
+		if _, ok := node.Obj().(*container.ThemeOverride); ok {
+			theme.PopRenderingTheme()
 		}
 	}
-	c.WalkTrees(nil, ensureMinSize)
+	c.WalkTrees(setup, ensureMinSize)
 
 	shouldResize := windowNeedsMinSizeUpdate && (csize.Width < min.Width || csize.Height < min.Height)
 	if shouldResize {
 		c.impl.Resize(csize.Max(min))
-	}
-
-	if lastParent != nil {
-		c.RLock()
-		updateLayout(lastParent)
-		c.RUnlock()
 	}
 	return windowNeedsMinSizeUpdate
 }
@@ -126,9 +157,7 @@ func (c *Canvas) Focus(obj fyne.Focusable) {
 		return
 	}
 
-	c.RLock()
 	focusMgrs := append([]*app.FocusManager{c.contentFocusMgr, c.menuFocusMgr}, c.overlays.ListFocusManagers()...)
-	c.RUnlock()
 
 	for _, mgr := range focusMgrs {
 		if mgr == nil {
@@ -195,48 +224,69 @@ func (c *Canvas) FocusPrevious() {
 }
 
 // FreeDirtyTextures frees dirty textures and returns the number of freed textures.
-func (c *Canvas) FreeDirtyTextures() uint64 {
-	freed := uint64(0)
-
-	// Within a frame, refresh tasks are requested from the Refresh method,
-	// and we desire to process all requested operations as much as possible
-	// in a frame. Use a counter to guarantee that all desired tasks are
-	// processed. See https://github.com/fyne-io/fyne/issues/2548.
-	for atomic.LoadUint32(&c.refreshCount) > 0 {
-		var object fyne.CanvasObject
-		select {
-		case object = <-c.refreshQueue.Out():
-		default:
-			// If refreshCount is positive but we cannot receive any object
-			// from the refreshQueue, this means that the refresh task is
-			// not yet ready to receive, continue until we can receive it.
-			// Furthermore, we use Gosched to avoid CPU spin.
-			runtime.Gosched()
-			continue
-		}
-		atomic.AddUint32(&c.refreshCount, ^uint32(0))
-		freed++
+func (c *Canvas) FreeDirtyTextures() (freed uint64) {
+	freeObject := func(object fyne.CanvasObject) {
 		freeWalked := func(obj fyne.CanvasObject, _ fyne.Position, _ fyne.Position, _ fyne.Size) bool {
+			// No image refresh while recursing to avoid double texture upload.
+			if _, ok := obj.(*canvas.Image); ok {
+				return false
+			}
 			if c.painter != nil {
 				c.painter.Free(obj)
 			}
 			return false
 		}
-		driver.WalkCompleteObjectTree(object, freeWalked, nil)
+
+		// Image.Refresh will trigger a refresh specific to the object, while recursing on parent widget would just lead to
+		// a double texture upload.
+		if img, ok := object.(*canvas.Image); ok {
+			if c.painter != nil {
+				c.painter.Free(img)
+			}
+		} else {
+			driver.WalkCompleteObjectTree(object, freeWalked, nil)
+		}
 	}
 
-	cache.RangeExpiredTexturesFor(c.impl, func(obj fyne.CanvasObject) {
-		if c.painter != nil {
-			c.painter.Free(obj)
+	// Within a frame, refresh tasks are requested from the Refresh method,
+	// and we desire to clear out all requested operations within a frame.
+	// See https://github.com/fyne-io/fyne/issues/2548.
+	tasksToDo := c.refreshQueue.Len()
+
+	shouldFilterDuplicates := (tasksToDo > 200) // filtering has overhead, not worth enabling for few tasks
+	var refreshSet map[fyne.CanvasObject]struct{}
+	if shouldFilterDuplicates {
+		refreshSet = make(map[fyne.CanvasObject]struct{})
+	}
+
+	for c.refreshQueue.Len() > 0 {
+		object := c.refreshQueue.Out()
+		if !shouldFilterDuplicates {
+			freed++
+			freeObject(object)
+		} else {
+			refreshSet[object] = struct{}{}
+			tasksToDo--
+			if tasksToDo == 0 {
+				shouldFilterDuplicates = false // stop collecting messages to avoid starvation
+				for object := range refreshSet {
+					freed++
+					freeObject(object)
+				}
+			}
 		}
-	})
-	return freed
+	}
+
+	if c.painter != nil {
+		cache.RangeExpiredTexturesFor(c.impl, c.painter.Free)
+	}
+	return
 }
 
 // Initialize initializes the canvas.
 func (c *Canvas) Initialize(impl SizeableCanvas, onOverlayChanged func()) {
 	c.impl = impl
-	c.refreshQueue = async.NewUnboundedCanvasObjectChan()
+	c.refreshQueue = async.NewCanvasObjectQueue()
 	c.overlays = &overlayStack{
 		OverlayStack: internal.OverlayStack{
 			OnChange: onOverlayChanged,
@@ -249,7 +299,6 @@ func (c *Canvas) Initialize(impl SizeableCanvas, onOverlayChanged func()) {
 //
 // This function uses lock.
 func (c *Canvas) ObjectTrees() []fyne.CanvasObject {
-	c.RLock()
 	var content, menu fyne.CanvasObject
 	if c.contentTree != nil && c.contentTree.root != nil {
 		content = c.contentTree.root.obj
@@ -257,7 +306,6 @@ func (c *Canvas) ObjectTrees() []fyne.CanvasObject {
 	if c.menuTree != nil && c.menuTree.root != nil {
 		menu = c.menuTree.root.obj
 	}
-	c.RUnlock()
 	trees := make([]fyne.CanvasObject, 0, len(c.Overlays().List())+2)
 	trees = append(trees, content)
 	if menu != nil {
@@ -280,9 +328,8 @@ func (c *Canvas) Painter() gl.Painter {
 
 // Refresh refreshes a canvas object.
 func (c *Canvas) Refresh(obj fyne.CanvasObject) {
-	atomic.AddUint32(&c.refreshCount, 1)
-	c.refreshQueue.In() <- obj // never block
-	c.SetDirty(true)
+	c.refreshQueue.In(obj)
+	async.EnsureMain(c.SetDirty)
 }
 
 // RemoveShortcut removes a shortcut from the canvas.
@@ -305,23 +352,17 @@ func (c *Canvas) SetContentTreeAndFocusMgr(content fyne.CanvasObject) {
 	}
 }
 
-const (
-	dirtyTrue  = 1
-	dirtyFalse = 0
-)
-
-// IsDirty checks if the canvas is dirty.
-func (c *Canvas) IsDirty() bool {
-	return atomic.LoadUint32(&c.dirty) == dirtyTrue
+// CheckDirtyAndClear returns true if the canvas is dirty and
+// clears the dirty state atomically.
+func (c *Canvas) CheckDirtyAndClear() bool {
+	wasDirty := c.dirty
+	c.dirty = false
+	return wasDirty
 }
 
-// SetDirty sets canvas dirty flag.
-func (c *Canvas) SetDirty(dirty bool) {
-	if dirty {
-		atomic.StoreUint32(&c.dirty, dirtyTrue)
-	} else {
-		atomic.StoreUint32(&c.dirty, dirtyFalse)
-	}
+// SetDirty sets canvas dirty flag atomically.
+func (c *Canvas) SetDirty() {
+	c.dirty = true
 }
 
 // SetMenuTreeAndFocusMgr sets menu tree and focus manager.
@@ -367,7 +408,7 @@ func (c *Canvas) Unfocus() {
 // WalkTrees walks over the trees.
 func (c *Canvas) WalkTrees(
 	beforeChildren func(*RenderCacheNode, fyne.Position),
-	afterChildren func(*RenderCacheNode),
+	afterChildren func(*RenderCacheNode, fyne.Position),
 ) {
 	c.walkTree(c.contentTree, beforeChildren, afterChildren)
 	if c.mWindowHeadTree != nil && c.mWindowHeadTree.root.obj != nil {
@@ -387,8 +428,6 @@ func (c *Canvas) focusManager() *app.FocusManager {
 	if focusMgr := c.overlays.TopFocusManager(); focusMgr != nil {
 		return focusMgr
 	}
-	c.RLock()
-	defer c.RUnlock()
 	if c.isMenuActive() {
 		return c.menuFocusMgr
 	}
@@ -409,10 +448,8 @@ func (c *Canvas) isMenuActive() bool {
 func (c *Canvas) walkTree(
 	tree *renderCacheTree,
 	beforeChildren func(*RenderCacheNode, fyne.Position),
-	afterChildren func(*RenderCacheNode),
+	afterChildren func(*RenderCacheNode, fyne.Position),
 ) {
-	tree.Lock()
-	defer tree.Unlock()
 	var node, parent, prev *RenderCacheNode
 	node = tree.root
 
@@ -443,7 +480,7 @@ func (c *Canvas) walkTree(
 		node = parent.firstChild
 		return false
 	}
-	ac := func(obj fyne.CanvasObject, _ fyne.CanvasObject) {
+	ac := func(obj fyne.CanvasObject, pos fyne.Position, _ fyne.CanvasObject) {
 		node = parent
 		parent = node.parent
 		if prev != nil && prev.parent != parent {
@@ -451,7 +488,7 @@ func (c *Canvas) walkTree(
 		}
 
 		if afterChildren != nil {
-			afterChildren(node)
+			afterChildren(node, pos)
 		}
 
 		prev = node
@@ -469,11 +506,6 @@ type RenderCacheNode struct {
 	parent      *RenderCacheNode
 	// cache data
 	minSize fyne.Size
-	// painterData is some data from the painter associated with the drawed node
-	// it may for instance point to a GL texture
-	// it should free all associated resources when released
-	// i.e. it should not simply be a texture reference integer
-	painterData interface{}
 }
 
 // Obj returns the node object.
@@ -488,7 +520,6 @@ type activatableMenu interface {
 type overlayStack struct {
 	internal.OverlayStack
 
-	propertyLock sync.RWMutex
 	renderCaches []*renderCacheTree
 }
 
@@ -496,8 +527,6 @@ func (o *overlayStack) Add(overlay fyne.CanvasObject) {
 	if overlay == nil {
 		return
 	}
-	o.propertyLock.Lock()
-	defer o.propertyLock.Unlock()
 	o.add(overlay)
 }
 
@@ -505,8 +534,6 @@ func (o *overlayStack) Remove(overlay fyne.CanvasObject) {
 	if overlay == nil || len(o.List()) == 0 {
 		return
 	}
-	o.propertyLock.Lock()
-	defer o.propertyLock.Unlock()
 	o.remove(overlay)
 }
 
@@ -518,21 +545,30 @@ func (o *overlayStack) add(overlay fyne.CanvasObject) {
 func (o *overlayStack) remove(overlay fyne.CanvasObject) {
 	o.OverlayStack.Remove(overlay)
 	overlayCount := len(o.List())
+
+	// it is possible that overlays are removed implicitly and render caches already cleared out
+	if overlayCount >= len(o.renderCaches) {
+		return
+	}
+
+	o.renderCaches[overlayCount] = nil // release memory reference to removed element
 	o.renderCaches = o.renderCaches[:overlayCount]
 }
 
 type renderCacheTree struct {
-	sync.RWMutex
 	root *RenderCacheNode
 }
 
-func updateLayout(objToLayout fyne.CanvasObject) {
+func (c *Canvas) updateLayout(objToLayout fyne.CanvasObject) {
 	switch cont := objToLayout.(type) {
 	case *fyne.Container:
 		if cont.Layout != nil {
-			cont.Layout.Layout(cont.Objects, cont.Size())
+			layout := cont.Layout
+			objects := cont.Objects
+			layout.Layout(objects, cont.Size())
 		}
 	case fyne.Widget:
-		cache.Renderer(cont).Layout(cont.Size())
+		renderer := cache.Renderer(cont)
+		renderer.Layout(cont.Size())
 	}
 }

@@ -1,4 +1,4 @@
-// +build !android,!ios,!mobile
+//go:build !android && !ios && !mobile && !wasm && !test_web_driver
 
 package app
 
@@ -40,12 +40,12 @@ func watchFile(path string, callback func()) *fsnotify.Watcher {
 
 	go func() {
 		for event := range watcher.Events {
-			if event.Op&fsnotify.Remove != 0 { // if it was deleted then watch again
+			if event.Op.Has(fsnotify.Remove) { // if it was deleted then watch again
 				watcher.Remove(path) // fsnotify returns false positives, see https://github.com/fsnotify/fsnotify/issues/268
 
 				watchFileAddTarget(watcher, path)
 			} else {
-				callback()
+				fyne.Do(callback)
 			}
 		}
 
@@ -60,9 +60,15 @@ func watchFile(path string, callback func()) *fsnotify.Watcher {
 }
 
 func (s *settings) watchSettings() {
+	if s.themeSpecified {
+		return // we only watch for theme changes at this time so don't bother
+	}
 	s.watcher = watchFile(s.schema.StoragePath(), s.fileChanged)
 
-	watchTheme()
+	a := fyne.CurrentApp()
+	if a != nil && s != nil && a.Settings() == s { // ignore if testing
+		watchTheme(s)
+	}
 }
 
 func (s *settings) stopWatching() {

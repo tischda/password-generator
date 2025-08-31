@@ -48,7 +48,7 @@ type hasOpenPicker interface {
 
 // ShowFileOpenPicker loads the native file open dialog and returns the chosen file path via the callback func.
 func ShowFileOpenPicker(callback func(fyne.URIReadCloser, error), filter storage.FileFilter) {
-	drv := fyne.CurrentApp().Driver().(*mobileDriver)
+	drv := fyne.CurrentApp().Driver().(*driver)
 	if a, ok := drv.app.(hasOpenPicker); ok {
 		a.ShowFileOpenPicker(func(uri string, closer func()) {
 			if uri == "" {
@@ -67,15 +67,21 @@ func ShowFileOpenPicker(callback func(fyne.URIReadCloser, error), filter storage
 // ShowFolderOpenPicker loads the native folder open dialog and calls back the chosen directory path as a ListableURI.
 func ShowFolderOpenPicker(callback func(fyne.ListableURI, error)) {
 	filter := storage.NewMimeTypeFileFilter([]string{"application/x-directory"})
-	drv := fyne.CurrentApp().Driver().(*mobileDriver)
+	drv := fyne.CurrentApp().Driver().(*driver)
 	if a, ok := drv.app.(hasOpenPicker); ok {
-		a.ShowFileOpenPicker(func(uri string, _ func()) {
-			if uri == "" {
+		a.ShowFileOpenPicker(func(path string, _ func()) {
+			if path == "" {
 				callback(nil, nil)
 				return
 			}
-			f, err := listerForURI(storage.NewURI(uri))
-			callback(f, err)
+
+			uri, err := storage.ParseURI(path)
+			if err != nil {
+				callback(nil, err)
+				return
+			}
+
+			callback(listerForURI(uri))
 		}, mobileFilter(filter))
 	}
 }
@@ -90,9 +96,9 @@ func (f *fileSave) URI() fyne.URI {
 	return f.uri
 }
 
-func fileWriterForURI(u fyne.URI) (fyne.URIWriteCloser, error) {
+func fileWriterForURI(u fyne.URI, truncate bool) (fyne.URIWriteCloser, error) {
 	file := &fileSave{uri: u}
-	write, err := nativeFileSave(file)
+	write, err := nativeFileSave(file, truncate)
 	if write == nil {
 		return nil, err
 	}
@@ -106,14 +112,22 @@ type hasSavePicker interface {
 
 // ShowFileSavePicker loads the native file save dialog and returns the chosen file path via the callback func.
 func ShowFileSavePicker(callback func(fyne.URIWriteCloser, error), filter storage.FileFilter, filename string) {
-	drv := fyne.CurrentApp().Driver().(*mobileDriver)
+	drv := fyne.CurrentApp().Driver().(*driver)
 	if a, ok := drv.app.(hasSavePicker); ok {
-		a.ShowFileSavePicker(func(uri string, closer func()) {
-			if uri == "" {
+		a.ShowFileSavePicker(func(path string, closer func()) {
+			if path == "" {
 				callback(nil, nil)
 				return
 			}
-			f, err := fileWriterForURI(storage.NewURI(uri))
+
+			uri, err := storage.ParseURI(path)
+			if err != nil {
+				callback(nil, err)
+				return
+			}
+
+			// TODO: does the save dialog want to truncate by default?
+			f, err := fileWriterForURI(uri, true)
 			if f != nil {
 				f.(*fileSave).done = closer
 			}

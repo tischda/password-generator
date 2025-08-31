@@ -7,6 +7,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/internal/scale"
 	"fyne.io/fyne/v2/theme"
 )
 
@@ -108,6 +109,11 @@ type HyperlinkSegment struct {
 	Alignment fyne.TextAlign
 	Text      string
 	URL       *url.URL
+
+	// OnTapped overrides the default `fyne.OpenURL` call when the link is tapped
+	//
+	// Since: 2.4
+	OnTapped func() `json:"-"`
 }
 
 // Inline returns true as hyperlinks are inside other elements.
@@ -120,11 +126,12 @@ func (h *HyperlinkSegment) Textual() string {
 	return h.Text
 }
 
-// Visual returns the hyperlink widget required to render this segment.
+// Visual returns a new instance of a hyperlink widget required to render this segment.
 func (h *HyperlinkSegment) Visual() fyne.CanvasObject {
 	link := NewHyperlink(h.Text, h.URL)
 	link.Alignment = h.Alignment
-	return &fyne.Container{Layout: &unpadTextWidgetLayout{}, Objects: []fyne.CanvasObject{link}}
+	link.OnTapped = h.OnTapped
+	return &fyne.Container{Layout: &unpadTextWidgetLayout{parent: link}, Objects: []fyne.CanvasObject{link}}
 }
 
 // Update applies the current state of this hyperlink segment to an existing visual.
@@ -133,6 +140,7 @@ func (h *HyperlinkSegment) Update(o fyne.CanvasObject) {
 	link.Text = h.Text
 	link.URL = h.URL
 	link.Alignment = h.Alignment
+	link.OnTapped = h.OnTapped
 	link.Refresh()
 }
 
@@ -149,6 +157,62 @@ func (h *HyperlinkSegment) SelectedText() string {
 
 // Unselect tells the segment that the user is has cancelled the previous selection.
 func (h *HyperlinkSegment) Unselect() {
+	// no-op: this will be added when we progress to editor
+}
+
+// ImageSegment represents an image within a rich text widget.
+//
+// Since: 2.3
+type ImageSegment struct {
+	Source fyne.URI
+	Title  string
+
+	// Alignment specifies the horizontal alignment of this image segment
+	// Since: 2.4
+	Alignment fyne.TextAlign
+}
+
+// Inline returns false as images in rich text are blocks.
+func (i *ImageSegment) Inline() bool {
+	return false
+}
+
+// Textual returns the content of this segment rendered to plain text.
+func (i *ImageSegment) Textual() string {
+	return "Image " + i.Title
+}
+
+// Visual returns a new instance of an image widget required to render this segment.
+func (i *ImageSegment) Visual() fyne.CanvasObject {
+	return newRichImage(i.Source, i.Alignment)
+}
+
+// Update applies the current state of this image segment to an existing visual.
+func (i *ImageSegment) Update(o fyne.CanvasObject) {
+	newer := canvas.NewImageFromURI(i.Source)
+	img := o.(*richImage)
+
+	// one of the following will be used
+	img.img.File = newer.File
+	img.img.Resource = newer.Resource
+	img.setAlign(i.Alignment)
+
+	img.Refresh()
+}
+
+// Select tells the segment that the user is selecting the content between the two positions.
+func (i *ImageSegment) Select(begin, end fyne.Position) {
+	// no-op: this will be added when we progress to editor
+}
+
+// SelectedText should return the text representation of any content currently selected through the Select call.
+func (i *ImageSegment) SelectedText() string {
+	// no-op: images have no text rendering
+	return ""
+}
+
+// Unselect tells the segment that the user is has cancelled the previous selection.
+func (i *ImageSegment) Unselect() {
 	// no-op: this will be added when we progress to editor
 }
 
@@ -174,16 +238,10 @@ func (l *ListSegment) Segments() []RichTextSegment {
 			txt = strconv.Itoa(i+1) + "."
 		}
 		bullet := &TextSegment{Text: txt + " ", Style: RichTextStyleStrong}
-		if para, ok := in.(*ParagraphSegment); ok {
-			seg := &ParagraphSegment{Texts: []RichTextSegment{bullet}}
-			seg.Texts = append(seg.Texts, para.Texts...)
-			out[i] = seg
-		} else {
-			out[i] = &ParagraphSegment{Texts: []RichTextSegment{
-				bullet,
-				in,
-			}}
-		}
+		out[i] = &ParagraphSegment{Texts: []RichTextSegment{
+			bullet,
+			in,
+		}}
 	}
 	return out
 }
@@ -198,7 +256,7 @@ func (l *ListSegment) Visual() fyne.CanvasObject {
 	return nil
 }
 
-// Update doesnt need to change a list visual.
+// Update doesn't need to change a list visual.
 func (l *ListSegment) Update(fyne.CanvasObject) {
 }
 
@@ -243,7 +301,7 @@ func (p *ParagraphSegment) Visual() fyne.CanvasObject {
 	return nil
 }
 
-// Update doesnt need to change a paragraph container.
+// Update doesn't need to change a paragraph container.
 func (p *ParagraphSegment) Update(fyne.CanvasObject) {
 }
 
@@ -264,8 +322,7 @@ func (p *ParagraphSegment) Unselect() {
 //
 // Since: 2.1
 type SeparatorSegment struct {
-	//lint:ignore U1000 This is required due to language design.
-	dummy uint8 // without this a pointer to SeparatorSegment will always be the same
+	_ bool // Without this a pointer to SeparatorSegment will always be the same.
 }
 
 // Inline returns false as a separator should be full width.
@@ -278,12 +335,12 @@ func (s *SeparatorSegment) Textual() string {
 	return ""
 }
 
-// Visual returns the separator element for this segment.
+// Visual returns a new instance of a separator widget for this segment.
 func (s *SeparatorSegment) Visual() fyne.CanvasObject {
 	return NewSeparator()
 }
 
-// Update doesnt need to change a separator visual.
+// Update doesn't need to change a separator visual.
 func (s *SeparatorSegment) Update(fyne.CanvasObject) {
 }
 
@@ -307,7 +364,7 @@ type RichTextStyle struct {
 	Alignment fyne.TextAlign
 	ColorName fyne.ThemeColorName
 	Inline    bool
-	SizeName  fyne.ThemeSizeName
+	SizeName  fyne.ThemeSizeName // The theme name of the text size to use, if blank will be the standard text size
 	TextStyle fyne.TextStyle
 
 	// an internal detail where we obscure password fields
@@ -334,6 +391,8 @@ type RichTextSegment interface {
 type TextSegment struct {
 	Style RichTextStyle
 	Text  string
+
+	parent *RichText
 }
 
 // Inline should return true if this text can be included within other elements, or false if it creates a new block.
@@ -346,7 +405,7 @@ func (t *TextSegment) Textual() string {
 	return t.Text
 }
 
-// Visual returns the graphical elements required to render this segment.
+// Visual returns a new instance of a graphical element required to render this segment.
 func (t *TextSegment) Visual() fyne.CanvasObject {
 	obj := canvas.NewText(t.Text, t.color())
 
@@ -383,32 +442,103 @@ func (t *TextSegment) Unselect() {
 
 func (t *TextSegment) color() color.Color {
 	if t.Style.ColorName != "" {
-		return fyne.CurrentApp().Settings().Theme().Color(t.Style.ColorName, fyne.CurrentApp().Settings().ThemeVariant())
+		return theme.ColorForWidget(t.Style.ColorName, t.parent)
 	}
 
-	return theme.ForegroundColor()
+	return theme.ColorForWidget(theme.ColorNameForeground, t.parent)
 }
 
 func (t *TextSegment) size() float32 {
 	if t.Style.SizeName != "" {
-		return fyne.CurrentApp().Settings().Theme().Size(t.Style.SizeName)
+		i := theme.SizeForWidget(t.Style.SizeName, t.parent)
+		return i
 	}
 
-	return theme.TextSize()
+	i := theme.SizeForWidget(theme.SizeNameText, t.parent)
+	return i
+}
+
+type richImage struct {
+	BaseWidget
+	align  fyne.TextAlign
+	img    *canvas.Image
+	oldMin fyne.Size
+	layout *fyne.Container
+	min    fyne.Size
+}
+
+func newRichImage(u fyne.URI, align fyne.TextAlign) *richImage {
+	img := canvas.NewImageFromURI(u)
+	img.FillMode = canvas.ImageFillOriginal
+	i := &richImage{img: img, align: align}
+	i.ExtendBaseWidget(i)
+	return i
+}
+
+func (r *richImage) CreateRenderer() fyne.WidgetRenderer {
+	r.layout = &fyne.Container{Layout: &richImageLayout{r}, Objects: []fyne.CanvasObject{r.img}}
+	return NewSimpleRenderer(r.layout)
+}
+
+func (r *richImage) MinSize() fyne.Size {
+	orig := r.img.MinSize()
+	c := fyne.CurrentApp().Driver().CanvasForObject(r)
+	if c == nil {
+		return r.oldMin // not yet rendered
+	}
+
+	// unscale the image so it is not varying based on canvas
+	w := scale.ToScreenCoordinate(c, orig.Width)
+	h := scale.ToScreenCoordinate(c, orig.Height)
+	// we return size / 2 as this assumes a HiDPI / 2x image scaling
+	r.min = fyne.NewSize(float32(w)/2, float32(h)/2)
+	return r.min
+}
+
+func (r *richImage) setAlign(a fyne.TextAlign) {
+	if r.layout != nil {
+		r.layout.Refresh()
+	}
+	r.align = a
+}
+
+type richImageLayout struct {
+	r *richImage
+}
+
+func (r *richImageLayout) Layout(_ []fyne.CanvasObject, s fyne.Size) {
+	r.r.img.Resize(r.r.min)
+	gap := float32(0)
+
+	switch r.r.align {
+	case fyne.TextAlignCenter:
+		gap = (s.Width - r.r.min.Width) / 2
+	case fyne.TextAlignTrailing:
+		gap = s.Width - r.r.min.Width
+	}
+
+	r.r.img.Move(fyne.NewPos(gap, 0))
+}
+
+func (r *richImageLayout) MinSize(_ []fyne.CanvasObject) fyne.Size {
+	return r.r.min
 }
 
 type unpadTextWidgetLayout struct {
+	parent fyne.Widget
 }
 
 func (u *unpadTextWidgetLayout) Layout(o []fyne.CanvasObject, s fyne.Size) {
-	pad2 := theme.Padding() * -2
-	pad4 := pad2 * -2
+	innerPad := theme.SizeForWidget(theme.SizeNameInnerPadding, u.parent)
+	pad := innerPad * -1
+	pad2 := pad * -2
 
-	o[0].Move(fyne.NewPos(pad2, pad2))
-	o[0].Resize(s.Add(fyne.NewSize(pad4, pad4)))
+	o[0].Move(fyne.NewPos(pad, pad))
+	o[0].Resize(s.Add(fyne.NewSize(pad2, pad2)))
 }
 
 func (u *unpadTextWidgetLayout) MinSize(o []fyne.CanvasObject) fyne.Size {
-	pad4 := theme.Padding() * 4
-	return o[0].MinSize().Subtract(fyne.NewSize(pad4, pad4))
+	innerPad := theme.SizeForWidget(theme.SizeNameInnerPadding, u.parent)
+	pad := innerPad * 2
+	return o[0].MinSize().Subtract(fyne.NewSize(pad, pad))
 }

@@ -15,8 +15,7 @@ type iconRenderer struct {
 }
 
 func (i *iconRenderer) MinSize() fyne.Size {
-	size := theme.IconInlineSize()
-	return fyne.NewSize(size, size)
+	return fyne.NewSquareSize(i.image.Theme().Size(theme.SizeNameInlineIcon))
 }
 
 func (i *iconRenderer) Layout(size fyne.Size) {
@@ -32,12 +31,14 @@ func (i *iconRenderer) Refresh() {
 		return
 	}
 
-	i.image.propertyLock.RLock()
 	i.raster.Resource = i.image.Resource
 	i.image.cachedRes = i.image.Resource
-	i.image.propertyLock.RUnlock()
 
-	canvas.Refresh(i.image.super())
+	if i.image.Resource == nil {
+		i.raster.Image = nil // reset the internal caching too...
+	}
+
+	i.raster.Refresh()
 }
 
 // Icon widget is a basic image component that load's its resource to match the theme.
@@ -63,11 +64,10 @@ func (i *Icon) MinSize() fyne.Size {
 // CreateRenderer is a private method to Fyne which links this widget to its renderer
 func (i *Icon) CreateRenderer() fyne.WidgetRenderer {
 	i.ExtendBaseWidget(i)
-	i.propertyLock.RLock()
-	defer i.propertyLock.RUnlock()
 
 	img := canvas.NewImageFromResource(i.Resource)
 	img.FillMode = canvas.ImageFillContain
+
 	r := &iconRenderer{image: i, raster: img}
 	r.SetObjects([]fyne.CanvasObject{img})
 	i.cachedRes = i.Resource

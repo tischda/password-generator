@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build android
+//go:build android
 
 #include <android/log.h>
 #include <dlfcn.h>
@@ -53,6 +53,7 @@ static jmethodID show_keyboard_method;
 static jmethodID hide_keyboard_method;
 static jmethodID show_file_open_method;
 static jmethodID show_file_save_method;
+static jmethodID finish_method;
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 	JNIEnv* env;
@@ -64,6 +65,16 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 }
 
 static int main_running = 0;
+
+// ensure we refresh context on resume in case something has changed...
+void onResume(ANativeActivity *activity) {
+	JNIEnv* env = activity->env;
+	setCurrentContext(activity->vm, (*env)->NewGlobalRef(env, activity->clazz));
+}
+
+void onStart(ANativeActivity *activity) {}
+void onPause(ANativeActivity *activity) {}
+void onStop(ANativeActivity *activity) {}
 
 // Entry point from our subclassed NativeActivity.
 //
@@ -85,17 +96,25 @@ void ANativeActivity_onCreate(ANativeActivity *activity, void* savedState, size_
 		hide_keyboard_method = find_static_method(env, current_class, "hideKeyboard", "()V");
 		show_file_open_method = find_static_method(env, current_class, "showFileOpen", "(Ljava/lang/String;)V");
 		show_file_save_method = find_static_method(env, current_class, "showFileSave", "(Ljava/lang/String;Ljava/lang/String;)V");
+		finish_method = find_method(env, current_class, "finishActivity", "()V");
 
 		setCurrentContext(activity->vm, (*env)->NewGlobalRef(env, activity->clazz));
 
+		jmethodID getfilesdir = find_method(env, current_class, "getFilesDir", "()Ljava/io/File;");
+		jobject filesdirfile = (jobject)(*env)->CallObjectMethod(env, activity->clazz, getfilesdir, NULL);
+		jclass file_class = (*env)->GetObjectClass(env, filesdirfile);
+		jmethodID getabsolutepath = find_method(env, file_class, "getAbsolutePath", "()Ljava/lang/String;");
+		jstring jpath = (jstring)(*env)->CallObjectMethod(env, filesdirfile, getabsolutepath, NULL);
+		const char* filesdir = (*env)->GetStringUTFChars(env, jpath, NULL);
+
 		// Set FILESDIR
-		if (setenv("FILESDIR", activity->internalDataPath, 1) != 0) {
+		if (setenv("FILESDIR", filesdir, 1) != 0) {
 			LOG_INFO("setenv(\"FILESDIR\", \"%s\", 1) failed: %d", activity->internalDataPath, errno);
 		}
 
 		// Set TMPDIR.
 		jmethodID gettmpdir = find_method(env, current_class, "getTmpdir", "()Ljava/lang/String;");
-		jstring jpath = (jstring)(*env)->CallObjectMethod(env, activity->clazz, gettmpdir, NULL);
+		jpath = (jstring)(*env)->CallObjectMethod(env, activity->clazz, gettmpdir, NULL);
 		const char* tmpdir = (*env)->GetStringUTFChars(env, jpath, NULL);
 		if (setenv("TMPDIR", tmpdir, 1) != 0) {
 			LOG_INFO("setenv(\"TMPDIR\", \"%s\", 1) failed: %d", tmpdir, errno);
@@ -204,6 +223,13 @@ char* destroyEGLSurface() {
 	return NULL;
 }
 
+void finish(JNIEnv* env, jobject ctx) {
+    (*env)->CallVoidMethod(
+        env,
+        ctx,
+        finish_method);
+}
+
 int32_t getKeyRune(JNIEnv* env, AInputEvent* e) {
 	return (int32_t)(*env)->CallStaticIntMethod(
 		env,
@@ -270,6 +296,10 @@ void Java_org_golang_app_GoNativeActivity_keyboardTyped(JNIEnv *env, jclass claz
 
 void Java_org_golang_app_GoNativeActivity_keyboardDelete(JNIEnv *env, jclass clazz) {
     keyboardDelete();
+}
+
+void Java_org_golang_app_GoNativeActivity_backPressed(JNIEnv *env, jclass clazz) {
+    onBackPressed();
 }
 
 void Java_org_golang_app_GoNativeActivity_setDarkMode(JNIEnv *env, jclass clazz, jboolean dark) {

@@ -10,19 +10,34 @@ import (
 	"fyne.io/fyne/v2"
 )
 
+// EqualURI returns true if the two URIs are equal.
+//
+// Since: 2.6
+func EqualURI(t1, t2 fyne.URI) bool {
+	if t1 == nil || t2 == nil {
+		return t1 == t2
+	}
+
+	u1, ok1 := t1.(*uri)
+	u2, ok2 := t2.(*uri)
+	if !ok1 || !ok2 {
+		return t1.String() == t2.String()
+	}
+
+	// Knowing the type, pointers are either the same or fields are the same.
+	// This avoids allocating a new string to represent the URIs.
+	return u1 == u2 || *u1 == *u2
+}
+
 // Declare conformance with fyne.URI interface.
 var _ fyne.URI = &uri{}
 
 type uri struct {
 	scheme    string
 	authority string
-	// haveAuthority lets us distinguish between a present-but-empty
-	// authority, and having no authority. This is needed because net/url
-	// incorrectly handles scheme:/absolute/path URIs.
-	haveAuthority bool
-	path          string
-	query         string
-	fragment      string
+	path      string
+	query     string
+	fragment  string
 }
 
 func (u *uri) Extension() string {
@@ -34,7 +49,6 @@ func (u *uri) Name() string {
 }
 
 func (u *uri) MimeType() string {
-
 	mimeTypeFull := mime.TypeByExtension(u.Extension())
 	if mimeTypeFull == "" {
 		mimeTypeFull = "text/plain"
@@ -54,7 +68,8 @@ func (u *uri) MimeType() string {
 		}
 	}
 
-	return strings.Split(mimeTypeFull, ";")[0]
+	mimeType, _, _ := strings.Cut(mimeTypeFull, ";")
+	return mimeType
 }
 
 func (u *uri) Scheme() string {
@@ -65,11 +80,7 @@ func (u *uri) String() string {
 	// NOTE: this string reconstruction is mandated by IETF RFC3986,
 	// section 5.3, pp. 35.
 
-	s := u.scheme + ":"
-	if u.haveAuthority {
-		s += "//" + u.authority
-	}
-	s += u.path
+	s := u.scheme + "://" + u.authority + u.path
 	if len(u.query) > 0 {
 		s += "?" + u.query
 	}

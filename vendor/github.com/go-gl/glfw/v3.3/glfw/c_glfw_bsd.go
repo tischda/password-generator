@@ -1,4 +1,4 @@
-// +build freebsd openbsd
+//go:build freebsd || netbsd || openbsd
 
 package glfw
 

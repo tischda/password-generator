@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin
-// +build !ios
+//go:build darwin && !ios
 
 package app
 
@@ -27,7 +26,6 @@ import "C"
 import (
 	"log"
 	"runtime"
-	"sync"
 
 	"fyne.io/fyne/v2/internal/driver/mobile/event/key"
 	"fyne.io/fyne/v2/internal/driver/mobile/event/lifecycle"
@@ -62,6 +60,10 @@ func main(f func(App)) {
 	}()
 
 	C.runApp()
+}
+
+func GoBack() {
+	// When simulating mobile there are no other activities open (and we can't just force background)
 }
 
 // loop is the primary drawing loop.
@@ -140,11 +142,6 @@ func setGeom(pixelsPerPt float32, widthPx, heightPx int) {
 	}
 }
 
-var touchEvents struct {
-	sync.Mutex
-	pending []touch.Event
-}
-
 func sendTouch(t touch.Type, x, y float32) {
 	theApp.events.In() <- touch.Event{
 		X:        x,
@@ -163,8 +160,18 @@ func eventMouseDragged(x, y float32) { sendTouch(touch.TypeMove, x, y) }
 //export eventMouseEnd
 func eventMouseEnd(x, y float32) { sendTouch(touch.TypeEnd, x, y) }
 
+var stopped = false
+
 //export lifecycleDead
-func lifecycleDead() { theApp.sendLifecycle(lifecycle.StageDead) }
+func lifecycleDead() {
+	if stopped {
+		return
+	}
+	stopped = true
+
+	theApp.sendLifecycle(lifecycle.StageDead)
+	theApp.events.Close()
+}
 
 //export eventKey
 func eventKey(runeVal int32, direction uint8, code uint16, flags uint32) {
@@ -394,6 +401,7 @@ var virtualKeyCodeMap = map[uint16]key.Code{
 // into the standard keycodes used by the key package.
 //
 // To get a sense of the key map, see the diagram on
+//
 //	http://boredzo.org/blog/archives/2007-05-22/virtual-key-codes
 func convVirtualKeyCode(vkcode uint16) key.Code {
 	if code, ok := virtualKeyCodeMap[vkcode]; ok {

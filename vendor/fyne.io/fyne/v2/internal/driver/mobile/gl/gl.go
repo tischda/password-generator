@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin linux openbsd freebsd windows
+//go:build darwin || linux || openbsd || freebsd || windows
 
 package gl
 
@@ -44,6 +44,7 @@ func (ctx *context) BindBuffer(target Enum, b Buffer) {
 		},
 	})
 }
+
 func (ctx *context) BindTexture(target Enum, t Texture) {
 	ctx.enqueue(call{
 		args: fnargs{
@@ -180,6 +181,7 @@ func (ctx *context) CreateVertexArray() VertexArray {
 		blocking: true,
 	}))}
 }
+
 func (ctx *context) DeleteBuffer(v Buffer) {
 	ctx.enqueue(call{
 		args: fnargs{
@@ -217,6 +219,7 @@ func (ctx *context) DrawArrays(mode Enum, first, count int) {
 		},
 	})
 }
+
 func (ctx *context) Enable(cap Enum) {
 	ctx.enqueue(call{
 		args: fnargs{
@@ -264,6 +267,37 @@ func (ctx *context) GetError() Enum {
 		},
 		blocking: true,
 	}))
+}
+
+func (ctx *context) GetProgrami(p Program, pname Enum) int {
+	return int(ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnGetProgramiv,
+			a0: p.c(),
+			a1: pname.c(),
+		},
+		blocking: true,
+	}))
+}
+
+func (ctx *context) GetProgramInfoLog(p Program) string {
+	infoLen := ctx.GetProgrami(p, InfoLogLength)
+	if infoLen == 0 {
+		return ""
+	}
+	buf := make([]byte, infoLen)
+
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnGetProgramInfoLog,
+			a0: p.c(),
+			a1: uintptr(infoLen),
+		},
+		parg:     unsafe.Pointer(&buf[0]),
+		blocking: true,
+	})
+
+	return goString(buf)
 }
 
 func (ctx *context) GetShaderi(s Shader, pname Enum) int {
@@ -392,6 +426,7 @@ func (ctx *context) ShaderSource(s Shader, src string) {
 		blocking: true,
 	})
 }
+
 func (ctx *context) TexImage2D(target Enum, level int, internalFormat int, width, height int, format Enum, ty Enum, data []byte) {
 	// It is common to pass TexImage2D a nil data, indicating that a
 	// bound GL buffer is being used as the source. In that case, it
@@ -438,6 +473,18 @@ func (ctx *context) Uniform1f(dst Uniform, v float32) {
 		},
 	})
 }
+
+func (ctx *context) Uniform2f(dst Uniform, v0, v1 float32) {
+	ctx.enqueue(call{
+		args: fnargs{
+			fn: glfnUniform2f,
+			a0: dst.c(),
+			a1: uintptr(math.Float32bits(v0)),
+			a2: uintptr(math.Float32bits(v1)),
+		},
+	})
+}
+
 func (ctx *context) Uniform4f(dst Uniform, v0, v1, v2, v3 float32) {
 	ctx.enqueue(call{
 		args: fnargs{

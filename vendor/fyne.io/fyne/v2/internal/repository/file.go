@@ -2,10 +2,10 @@ package repository
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -20,6 +20,7 @@ const fileSchemePrefix string = "file://"
 // declare conformance with repository types
 var _ repository.Repository = (*FileRepository)(nil)
 var _ repository.WritableRepository = (*FileRepository)(nil)
+var _ repository.AppendableRepository = (*FileRepository)(nil)
 var _ repository.HierarchicalRepository = (*FileRepository)(nil)
 var _ repository.ListableRepository = (*FileRepository)(nil)
 var _ repository.MovableRepository = (*FileRepository)(nil)
@@ -73,12 +74,16 @@ func (r *FileRepository) Exists(u fyne.URI) (bool, error) {
 	return ok, err
 }
 
-func openFile(uri fyne.URI, create bool) (*file, error) {
+func openFile(uri fyne.URI, write bool, truncate bool) (*file, error) {
 	path := uri.Path()
 	var f *os.File
 	var err error
-	if create {
-		f, err = os.Create(path) // If it exists this will truncate which is what we wanted
+	if write {
+		if truncate {
+			f, err = os.Create(path) // If it exists this will truncate which is what we wanted
+		} else {
+			f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		}
 	} else {
 		f, err = os.Open(path)
 	}
@@ -89,7 +94,7 @@ func openFile(uri fyne.URI, create bool) (*file, error) {
 //
 // Since: 2.0
 func (r *FileRepository) Reader(u fyne.URI) (fyne.URIReadCloser, error) {
-	return openFile(u, false)
+	return openFile(u, false, false)
 }
 
 // CanRead implements repository.Repository.CanRead
@@ -124,7 +129,14 @@ func (r *FileRepository) Destroy(scheme string) {
 //
 // Since: 2.0
 func (r *FileRepository) Writer(u fyne.URI) (fyne.URIWriteCloser, error) {
-	return openFile(u, true)
+	return openFile(u, true, true)
+}
+
+// Appender implements repository.AppendableRepository.Appender
+//
+// Since: 2.6
+func (r *FileRepository) Appender(u fyne.URI) (fyne.URIWriteCloser, error) {
+	return openFile(u, true, false)
 }
 
 // CanWrite implements repository.WritableRepository.CanWrite
@@ -172,19 +184,18 @@ func (r *FileRepository) Parent(u fyne.URI) (fyne.URI, error) {
 	// trim the scheme
 	s = strings.TrimPrefix(s, fileSchemePrefix)
 
-	// Completely empty URI with just a scheme
-	if s == "" {
+	// Completely empty URI or only root component
+	if s == "" || s == "/" || (len(s) == 2 && s[1] == ':') {
 		return nil, repository.ErrURIRoot
 	}
 
-	parent := ""
-	// use the system native path resolution
-	parent = filepath.Dir(s)
-	if parent[len(parent)-1] != filepath.Separator {
+	child := filepath.Base(s)
+	parent := s[:len(s)-len(child)] // avoid filepath.Dir as it follows platform rules
+	if parent == "" || parent[len(parent)-1] != '/' {
 		parent += "/"
 	}
 
-	// only root is it's own parent
+	// only root is its own parent
 	if filepath.Clean(parent) == filepath.Clean(s) {
 		return nil, repository.ErrURIRoot
 	}
@@ -216,7 +227,7 @@ func (r *FileRepository) Child(u fyne.URI, component string) (fyne.URI, error) {
 func (r *FileRepository) List(u fyne.URI) ([]fyne.URI, error) {
 
 	path := u.Path()
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -256,8 +267,12 @@ func (r *FileRepository) CanList(u fyne.URI) (bool, error) {
 		return false, nil
 	}
 
+	if runtime.GOOS == "windows" && len(p) <= 3 {
+		return true, nil // assume drives can be read, avoids hang if the drive is temporarily unresponsive
+	}
+
 	// We know it is a directory, but we don't know if we can read it, so
-	// we'll just try to do so and see if we get a permissions error.
+	// we'll just try to do so and see if we get a permission error.
 	f, err := os.Open(p)
 	if err == nil {
 		_, err = f.Readdir(1)
@@ -291,6 +306,15 @@ func (r *FileRepository) Copy(source, destination fyne.URI) error {
 //
 // Since: 2.0
 func (r *FileRepository) Move(source, destination fyne.URI) error {
+	listSrc, _ := r.CanList(source)
+	if listSrc {
+		err := os.Rename(source.Path(), destination.Path())
+		if err == nil {
+			return nil
+		}
+		// fallthrough to slow move
+	}
+
 	// NOTE: as far as I can tell, golang does not have an optimized Move
 	// function - everything I can find on the 'net suggests doing more
 	// or less the equivalent of GenericMove(), hence why that is used.

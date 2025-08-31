@@ -1,9 +1,8 @@
 package app
 
 import (
-	"sync"
-
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/internal/async"
 )
 
 var _ fyne.Lifecycle = (*Lifecycle)(nil)
@@ -12,82 +11,111 @@ var _ fyne.Lifecycle = (*Lifecycle)(nil)
 //
 // Since: 2.1
 type Lifecycle struct {
-	onForeground, onBackground func()
-	onStarted, onStopped       func()
+	onForeground func()
+	onBackground func()
+	onStarted    func()
+	onStopped    func()
 
-	mux sync.Mutex
+	onStoppedHookExecuted func()
+
+	eventQueue *async.UnboundedChan[func()]
 }
 
-// SetOnEnteredForeground hooks into the the app becoming foreground.
+// SetOnStoppedHookExecuted is an internal function that lets Fyne schedule a clean-up after
+// the user-provided stopped hook. It should only be called once during an application start-up.
+func (l *Lifecycle) SetOnStoppedHookExecuted(f func()) {
+	l.onStoppedHookExecuted = f
+}
+
+// SetOnEnteredForeground hooks into the app becoming foreground.
 func (l *Lifecycle) SetOnEnteredForeground(f func()) {
-	l.mux.Lock()
 	l.onForeground = f
-	l.mux.Unlock()
 }
 
 // SetOnExitedForeground hooks into the app having moved to the background.
 // Depending on the platform it may still be  visible but will not receive keyboard events.
 // On some systems hover or desktop mouse move events may still occur.
 func (l *Lifecycle) SetOnExitedForeground(f func()) {
-	l.mux.Lock()
 	l.onBackground = f
-	l.mux.Unlock()
 }
 
 // SetOnStarted hooks into an event that says the app is now running.
 func (l *Lifecycle) SetOnStarted(f func()) {
-	l.mux.Lock()
 	l.onStarted = f
-	l.mux.Unlock()
 }
 
 // SetOnStopped hooks into an event that says the app is no longer running.
 func (l *Lifecycle) SetOnStopped(f func()) {
-	l.mux.Lock()
 	l.onStopped = f
-	l.mux.Unlock()
 }
 
-// TriggerEnteredForeground will call the focus gained hook, if one is registered.
-func (l *Lifecycle) TriggerEnteredForeground() {
-	l.mux.Lock()
-	f := l.onForeground
-	l.mux.Unlock()
+// OnEnteredForeground returns the focus gained hook, if one is registered.
+func (l *Lifecycle) OnEnteredForeground() func() {
+	return l.onForeground
+}
 
-	if f != nil {
-		f()
+// OnExitedForeground returns the focus lost hook, if one is registered.
+func (l *Lifecycle) OnExitedForeground() func() {
+	return l.onBackground
+}
+
+// OnStarted returns the started hook, if one is registered.
+func (l *Lifecycle) OnStarted() func() {
+	return l.onStarted
+}
+
+// OnStopped returns the stopped hook, if one is registered.
+func (l *Lifecycle) OnStopped() func() {
+	stopped := l.onStopped
+	stopHook := l.onStoppedHookExecuted
+	if stopped == nil && stopHook == nil {
+		return nil
+	}
+
+	if stopHook == nil {
+		return stopped
+	}
+
+	if stopped == nil {
+		return stopHook
+	}
+
+	// we have a stopped handle and the onStoppedHook
+	return func() {
+		stopped()
+		stopHook()
 	}
 }
 
-// TriggerExitedForeground will call the focus lost hook, if one is registered.
-func (l *Lifecycle) TriggerExitedForeground() {
-	l.mux.Lock()
-	f := l.onBackground
-	l.mux.Unlock()
+// DestroyEventQueue destroys the event queue.
+func (l *Lifecycle) DestroyEventQueue() {
+	l.eventQueue.Close()
+}
 
-	if f != nil {
-		f()
+// InitEventQueue initializes the event queue.
+func (l *Lifecycle) InitEventQueue() {
+	// This channel should be closed when the window is closed.
+	l.eventQueue = async.NewUnboundedChan[func()]()
+}
+
+// QueueEvent uses this method to queue up a callback that handles an event. This ensures
+// user interaction events for a given window are processed in order.
+func (l *Lifecycle) QueueEvent(fn func()) {
+	l.eventQueue.In() <- fn
+}
+
+// RunEventQueue runs the event queue. This should called inside a go routine.
+// This function blocks.
+func (l *Lifecycle) RunEventQueue(run func(func(), bool)) {
+	for fn := range l.eventQueue.Out() {
+		run(fn, true)
 	}
 }
 
-// TriggerStarted will call the started hook, if one is registered.
-func (l *Lifecycle) TriggerStarted() {
-	l.mux.Lock()
-	f := l.onStarted
-	l.mux.Unlock()
+// WaitForEvents wait for all the events.
+func (l *Lifecycle) WaitForEvents() {
+	done := make(chan struct{})
 
-	if f != nil {
-		f()
-	}
-}
-
-// TriggerStopped will call the stopped hook, if one is registered.
-func (l *Lifecycle) TriggerStopped() {
-	l.mux.Lock()
-	f := l.onStopped
-	l.mux.Unlock()
-
-	if f != nil {
-		f()
-	}
+	l.eventQueue.In() <- func() { done <- struct{}{} }
+	<-done
 }

@@ -1,5 +1,4 @@
-// +build !ci
-// +build !legacy
+//go:build !ci && !legacy && !wasm && !test_web_driver
 
 package app
 

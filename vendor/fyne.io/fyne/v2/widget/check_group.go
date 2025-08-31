@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/internal/widget"
@@ -28,9 +30,8 @@ var _ fyne.Widget = (*CheckGroup)(nil)
 // Since: 2.1
 func NewCheckGroup(options []string, changed func([]string)) *CheckGroup {
 	r := &CheckGroup{
-		DisableableWidget: DisableableWidget{},
-		Options:           options,
-		OnChanged:         changed,
+		Options:   options,
+		OnChanged: changed,
 	}
 	r.ExtendBaseWidget(r)
 	r.update()
@@ -47,8 +48,6 @@ func (r *CheckGroup) Append(option string) {
 // CreateRenderer is a private method to Fyne which links this widget to its renderer
 func (r *CheckGroup) CreateRenderer() fyne.WidgetRenderer {
 	r.ExtendBaseWidget(r)
-	r.propertyLock.Lock()
-	defer r.propertyLock.Unlock()
 
 	r.update()
 	objects := make([]fyne.CanvasObject, len(r.items))
@@ -69,10 +68,29 @@ func (r *CheckGroup) MinSize() fyne.Size {
 //
 // Implements: fyne.CanvasObject
 func (r *CheckGroup) Refresh() {
-	r.propertyLock.Lock()
 	r.update()
-	r.propertyLock.Unlock()
 	r.BaseWidget.Refresh()
+}
+
+// Remove removes the first occurrence of the specified option found from a CheckGroup widget.
+// Return true if an option was removed.
+//
+// Since: 2.3
+func (r *CheckGroup) Remove(option string) bool {
+	for i, o := range r.Options {
+		if strings.EqualFold(option, o) {
+			r.Options = append(r.Options[:i], r.Options[i+1:]...)
+			for j, s := range r.Selected {
+				if strings.EqualFold(option, s) {
+					r.Selected = append(r.Selected[:j], r.Selected[j+1:]...)
+					break
+				}
+			}
+			r.Refresh()
+			return true
+		}
+	}
+	return false
 }
 
 // SetSelected sets the checked options, it can be used to set a default option.
@@ -146,7 +164,7 @@ func (r *CheckGroup) update() {
 
 		item.Text = r.Options[i]
 		item.Checked = contains
-		item.DisableableWidget.disabled = r.disabled
+		item.DisableableWidget.disabled = r.Disabled()
 		item.Refresh()
 	}
 }
@@ -160,7 +178,7 @@ type checkGroupRenderer struct {
 // Layout the components of the checks widget
 func (r *checkGroupRenderer) Layout(_ fyne.Size) {
 	count := 1
-	if r.items != nil && len(r.items) > 0 {
+	if len(r.items) > 0 {
 		count = len(r.items)
 	}
 	var itemHeight, itemWidth float32
@@ -194,13 +212,15 @@ func (r *checkGroupRenderer) MinSize() fyne.Size {
 	height := float32(0)
 	for _, item := range r.items {
 		itemMin := item.MinSize()
-		if r.checks.Horizontal {
-			height = fyne.Max(height, itemMin.Height)
-			width += itemMin.Width
-		} else {
-			width = fyne.Max(width, itemMin.Width)
-			height += itemMin.Height
-		}
+
+		width = fyne.Max(width, itemMin.Width)
+		height = fyne.Max(height, itemMin.Height)
+	}
+
+	if r.checks.Horizontal {
+		width = width * float32(len(r.items))
+	} else {
+		height = height * float32(len(r.items))
 	}
 
 	return fyne.NewSize(width, height)
@@ -237,7 +257,21 @@ func (r *checkGroupRenderer) updateItems() {
 		}
 		item.Text = r.checks.Options[i]
 		item.Checked = contains
-		item.disabled = r.checks.disabled
+		item.disabled = r.checks.Disabled()
 		item.Refresh()
 	}
+}
+
+func removeDuplicates(options []string) []string {
+	var result []string
+	found := make(map[string]bool)
+
+	for _, option := range options {
+		if _, ok := found[option]; !ok {
+			found[option] = true
+			result = append(result, option)
+		}
+	}
+
+	return result
 }

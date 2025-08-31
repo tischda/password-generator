@@ -1,12 +1,38 @@
 package storage
 
 import (
+	"path/filepath"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/storage/repository"
 )
 
+// EqualURI returns true if the two URIs are equal.
+//
+// Since: 2.6
+func EqualURI(t1, t2 fyne.URI) bool {
+	return repository.EqualURI(t1, t2)
+}
+
 // NewFileURI creates a new URI from the given file path.
+// Relative paths will be converted to absolute using filepath.Abs if required.
 func NewFileURI(path string) fyne.URI {
+	assumeAbs := false // avoid filepath.IsAbs as it follows platform rules
+	if len(path) >= 1 {
+		if path[0] == '/' {
+			assumeAbs = true
+		} else if len(path) >= 2 {
+			assumeAbs = path[1] == ':'
+		}
+	}
+
+	if !assumeAbs {
+		absolute, err := filepath.Abs(path)
+		if err == nil {
+			path = absolute
+		}
+	}
+
 	return repository.NewFileURI(path)
 }
 
@@ -44,23 +70,23 @@ func ParseURI(s string) (fyne.URI, error) {
 //
 // This can fail in several ways:
 //
-// * If the URI refers to a filesystem root, then the Parent() implementation
-//   must return (nil, URIRootError).
+//   - If the URI refers to a filesystem root, then the Parent() implementation
+//     must return (nil, URIRootError).
 //
-// * If the URI refers to a resource which does not exist in a hierarchical
-//   context (e.g. the URI references something which does not have a
-//   semantically meaningful "parent"), the Parent() implementation may return
-//   an error.
+//   - If the URI refers to a resource which does not exist in a hierarchical
+//     context (e.g. the URI references something which does not have a
+//     semantically meaningful "parent"), the Parent() implementation may return
+//     an error.
 //
-// * If determining the parent of the referenced resource requires
-//   interfacing with some external system, failures may propagate
-//   through the Parent() implementation. For example if determining
-//   the parent of a file:// URI requires reading information from
-//   the filesystem, it could fail with a permission error.
+//   - If determining the parent of the referenced resource requires
+//     interfacing with some external system, failures may propagate
+//     through the Parent() implementation. For example if determining
+//     the parent of a file:// URI requires reading information from
+//     the filesystem, it could fail with a permission error.
 //
-// * If the scheme of the given URI does not have a registered
-//   HierarchicalRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     HierarchicalRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // NOTE: since v2.0.0, Parent() is backed by the repository system - this
 // function is a helper which calls into an appropriate repository instance for
@@ -88,19 +114,19 @@ func Parent(u fyne.URI) (fyne.URI, error) {
 //
 // This can fail in several ways:
 //
-// * If the URI refers to a resource which does not exist in a hierarchical
-//   context (e.g. the URI references something which does not have a
-//   semantically meaningful "child"), the Child() implementation may return an
-//   error.
+//   - If the URI refers to a resource which does not exist in a hierarchical
+//     context (e.g. the URI references something which does not have a
+//     semantically meaningful "child"), the Child() implementation may return an
+//     error.
 //
-// * If generating a reference to a child of the referenced resource requires
-//   interfacing with some external system, failures may propagate through the
-//   Child() implementation. It is expected that this case would occur very
-//   rarely if ever.
+//   - If generating a reference to a child of the referenced resource requires
+//     interfacing with some external system, failures may propagate through the
+//     Child() implementation. It is expected that this case would occur very
+//     rarely if ever.
 //
-// * If the scheme of the given URI does not have a registered
-//   HierarchicalRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     HierarchicalRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // NOTE: since v2.0.0, Child() is backed by the repository system - this
 // function is a helper which calls into an appropriate repository instance for
@@ -125,10 +151,10 @@ func Child(u fyne.URI, component string) (fyne.URI, error) {
 //
 // This can fail in several ways:
 //
-// * If checking the existence of a resource requires interfacing with some
-//   external system, then failures may propagate through Exists(). For
-//   example, checking the existence of a resource requires reading a directory
-//   may result in a permissions error.
+//   - If checking the existence of a resource requires interfacing with some
+//     external system, then failures may propagate through Exists(). For
+//     example, checking the existence of a resource requires reading a directory
+//     may result in a permissions error.
 //
 // It is understood that a non-nil error value signals that the existence or
 // non-existence of the resource cannot be determined and is undefined.
@@ -155,16 +181,16 @@ func Exists(u fyne.URI) (bool, error) {
 //
 // This can fail in several ways:
 //
-// * If removing the resource requires interfacing with some external system,
-//   failures may propagate through Destroy(). For example, deleting a file may
-//   fail with a permissions error.
+//   - If removing the resource requires interfacing with some external system,
+//     failures may propagate through Destroy(). For example, deleting a file may
+//     fail with a permissions error.
 //
-// * If the referenced resource does not exist, attempting to destroy it should
-//   throw an error.
+//   - If the referenced resource does not exist, attempting to destroy it should
+//     throw an error.
 //
-// * If the scheme of the given URI does not have a registered
-//   WritableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     WritableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // Delete is backed by the repository system - this function calls
 // into a scheme-specific implementation from a registered repository.
@@ -190,16 +216,16 @@ func Delete(u fyne.URI) error {
 //
 // This method can fail in several ways:
 //
-// * Different permissions or credentials are required to read the
-//   referenced resource.
+//   - Different permissions or credentials are required to read the
+//     referenced resource.
 //
-// * This URI scheme could represent some resources that can be read,
-//   but this particular URI references a resources that is not
-//   something that can be read.
+//   - This URI scheme could represent some resources that can be read,
+//     but this particular URI references a resources that is not
+//     something that can be read.
 //
-// * Attempting to set up the reader depended on a lower level
-//   operation such as a network or filesystem access that has failed
-//   in some way.
+//   - Attempting to set up the reader depended on a lower level
+//     operation such as a network or filesystem access that has failed
+//     in some way.
 //
 // Reader is backed by the repository system - this function calls
 // into a scheme-specific implementation from a registered repository.
@@ -251,20 +277,20 @@ func CanRead(u fyne.URI) (bool, error) {
 //
 // This method can fail in several ways:
 //
-// * Different permissions or credentials are required to write to the
-//   referenced resource.
+//   - Different permissions or credentials are required to write to the
+//     referenced resource.
 //
-// * This URI scheme could represent some resources that can be
-//   written, but this particular URI references a resources that is
-//   not something that can be written.
+//   - This URI scheme could represent some resources that can be
+//     written, but this particular URI references a resources that is
+//     not something that can be written.
 //
-// * Attempting to set up the writer depended on a lower level
-//   operation such as a network or filesystem access that has failed
-//   in some way.
+//   - Attempting to set up the writer depended on a lower level
+//     operation such as a network or filesystem access that has failed
+//     in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   WritableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     WritableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // Writer is backed by the repository system - this function calls into a
 // scheme-specific implementation from a registered repository.
@@ -284,6 +310,48 @@ func Writer(u fyne.URI) (fyne.URIWriteCloser, error) {
 	return wrepo.Writer(u)
 }
 
+// Appender returns URIWriteCloser set up to write to the resource that the
+// URI references without truncating it first
+//
+// Writing to a non-extant resource should create that resource if possible
+// (and if not possible, this should be reflected in the return of CanWrite()).
+// Writing to an extant resource should NOT overwrite it in-place.
+//
+// This method can fail in several ways:
+//
+//   - Different permissions or credentials are required to write to the
+//     referenced resource.
+//
+//   - This URI scheme could represent some resources that can be
+//     written, but this particular URI references a resources that is
+//     not something that can be written.
+//
+//   - Attempting to set up the writer depended on a lower level
+//     operation such as a network or filesystem access that has failed
+//     in some way.
+//
+//   - If the scheme of the given URI does not have a registered
+//     AppendableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
+//
+// Appender is backed by the repository system - this function calls into a
+// scheme-specific implementation from a registered repository.
+//
+// Since: 2.6
+func Appender(u fyne.URI) (fyne.URIWriteCloser, error) {
+	repo, err := repository.ForURI(u)
+	if err != nil {
+		return nil, err
+	}
+
+	wrepo, ok := repo.(repository.AppendableRepository)
+	if !ok {
+		return nil, repository.ErrOperationNotSupported
+	}
+
+	return wrepo.Appender(u)
+}
+
 // CanWrite determines if a given URI could be written to using the Writer()
 // method. It is preferred to check if a URI is writable using this method
 // before calling Writer(), because the underlying operations required to
@@ -293,7 +361,6 @@ func Writer(u fyne.URI) (fyne.URIWriteCloser, error) {
 // Writer(), as the underlying filesystem may have changed since you called
 // CanWrite.
 
-//
 // CanWrite is backed by the repository system - this function calls into a
 // scheme-specific implementation from a registered repository.
 //
@@ -324,19 +391,19 @@ func CanWrite(u fyne.URI) (bool, error) {
 //
 // This method may fail in several ways:
 //
-// * Different permissions or credentials are required to perform the
-//   copy operation.
+//   - Different permissions or credentials are required to perform the
+//     copy operation.
 //
-// * This URI scheme could represent some resources that can be copied,
-//   but either the source, destination, or both are not resources
-//   that support copying.
+//   - This URI scheme could represent some resources that can be copied,
+//     but either the source, destination, or both are not resources
+//     that support copying.
 //
-// * Performing the copy operation depended on a lower level operation
-//   such as network or filesystem access that has failed in some way.
+//   - Performing the copy operation depended on a lower level operation
+//     such as network or filesystem access that has failed in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   CopyableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     CopyableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // Copy is backed by the repository system - this function calls into a
 // scheme-specific implementation from a registered repository.
@@ -370,22 +437,21 @@ func Copy(source fyne.URI, destination fyne.URI) error {
 // defined by the storage repository registered to the scheme of the source
 // URI.
 //
-//
 // This method may fail in several ways:
 //
-// * Different permissions or credentials are required to perform the
-//   rename operation.
+//   - Different permissions or credentials are required to perform the
+//     rename operation.
 //
-// * This URI scheme could represent some resources that can be renamed,
-//   but either the source, destination, or both are not resources
-//   that support renaming.
+//   - This URI scheme could represent some resources that can be renamed,
+//     but either the source, destination, or both are not resources
+//     that support renaming.
 //
-// * Performing the rename operation depended on a lower level operation
-//   such as network or filesystem access that has failed in some way.
+//   - Performing the rename operation depended on a lower level operation
+//     such as network or filesystem access that has failed in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   MovableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     MovableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // Move is backed by the repository system - this function calls into a
 // scheme-specific implementation from a registered repository.
@@ -409,19 +475,19 @@ func Move(source fyne.URI, destination fyne.URI) error {
 //
 // This method may fail in several ways:
 //
-// * Different permissions or credentials are required to check if the
-//   URI supports listing.
+//   - Different permissions or credentials are required to check if the
+//     URI supports listing.
 //
-// * This URI scheme could represent some resources that can be listed,
-//   but this specific URI is not one of them (e.g. a file on a
-//   filesystem, as opposed to a directory).
+//   - This URI scheme could represent some resources that can be listed,
+//     but this specific URI is not one of them (e.g. a file on a
+//     filesystem, as opposed to a directory).
 //
-// * Checking for listability depended on a lower level operation
-//   such as network or filesystem access that has failed in some way.
+//   - Checking for listability depended on a lower level operation
+//     such as network or filesystem access that has failed in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   ListableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     ListableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // CanList is backed by the repository system - this function calls into a
 // scheme-specific implementation from a registered repository.
@@ -447,20 +513,20 @@ func CanList(u fyne.URI) (bool, error) {
 //
 // This method may fail in several ways:
 //
-// * Different permissions or credentials are required to obtain a
-//   listing for the given URI.
+//   - Different permissions or credentials are required to obtain a
+//     listing for the given URI.
 //
-// * This URI scheme could represent some resources that can be listed,
-//   but this specific URI is not one of them (e.g. a file on a
-//   filesystem, as opposed to a directory). This can be tested in advance
-//   using the Listable() function.
+//   - This URI scheme could represent some resources that can be listed,
+//     but this specific URI is not one of them (e.g. a file on a
+//     filesystem, as opposed to a directory). This can be tested in advance
+//     using the Listable() function.
 //
-// * Obtaining the listing depended on a lower level operation such as
-//   network or filesystem access that has failed in some way.
+//   - Obtaining the listing depended on a lower level operation such as
+//     network or filesystem access that has failed in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   ListableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     ListableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // List is backed by the repository system - this function either calls into a
 // scheme-specific implementation from a registered repository, or fails with a
@@ -496,22 +562,22 @@ func List(u fyne.URI) ([]fyne.URI, error) {
 // Storage repositories which support listing, but not creation of listable
 // objects may return repository.ErrOperationNotSupported.
 //
-// CreateListable should generally fail if the parent of it's operand does not
+// CreateListable should generally fail if the parent of its operand does not
 // exist, however this can vary by the implementation details of the specific
 // storage repository. In filesystem terms, this function is "mkdir" not "mkdir
 // -p".
 //
 // This method may fail in several ways:
 //
-// * Different permissions or credentials are required to create the requested
-//   resource.
+//   - Different permissions or credentials are required to create the requested
+//     resource.
 //
-// * Creating the resource depended on a lower level operation such as network
-//   or filesystem access that has failed in some way.
+//   - Creating the resource depended on a lower level operation such as network
+//     or filesystem access that has failed in some way.
 //
-// * If the scheme of the given URI does not have a registered
-//   ListableRepository instance, then this method will fail with a
-//   repository.ErrOperationNotSupported.
+//   - If the scheme of the given URI does not have a registered
+//     ListableRepository instance, then this method will fail with a
+//     repository.ErrOperationNotSupported.
 //
 // CreateListable is backed by the repository system - this function either
 // calls into a scheme-specific implementation from a registered repository, or

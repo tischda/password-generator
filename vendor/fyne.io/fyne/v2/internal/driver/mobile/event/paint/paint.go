@@ -9,7 +9,7 @@ package paint // import "fyne.io/fyne/v2/internal/driver/mobile/event/paint"
 
 // Event indicates that the app is ready to paint the next frame of the GUI.
 //
-//A frame is completed by calling the App's Publish method.
+// A frame is completed by calling the App's Publish method.
 type Event struct {
 	// External is true for paint events sent by the screen driver.
 	//
@@ -21,4 +21,7 @@ type Event struct {
 	// should ignore external paint events to avoid a backlog of paint
 	// events building up.
 	External bool
+
+	// Window specifies a native handle for the window being painted into.
+	Window uintptr
 }

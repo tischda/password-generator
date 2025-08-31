@@ -4,6 +4,8 @@ import (
 	"image"
 	"image/color"
 	"math"
+
+	"fyne.io/fyne/v2"
 )
 
 // LinearGradient defines a Gradient travelling straight at a given angle.
@@ -31,19 +33,19 @@ func (g *LinearGradient) Generate(iw, ih int) image.Image {
 		}
 	case 45: // diagonal negative flipped
 		generator = func(x, y float64) float64 {
-			return math.Abs((w+h)-(x+h-y)) / math.Abs(w+h)
+			return math.Abs((w - x + y) / (w + h)) // ((w+h)-(x+h-y)) / (w+h)
 		}
 	case 225: // diagonal negative
 		generator = func(x, y float64) float64 {
-			return math.Abs(x+h-y) / math.Abs(w+h)
+			return math.Abs((x + h - y) / (w + h))
 		}
 	case 135: // diagonal positive flipped
 		generator = func(x, y float64) float64 {
-			return math.Abs((w+h)-(x+y)) / math.Abs(w+h)
+			return math.Abs((w + h - (x + y)) / (w + h))
 		}
 	case 315: // diagonal positive
 		generator = func(x, y float64) float64 {
-			return math.Abs(x+y) / math.Abs(w+h)
+			return math.Abs((x + y) / (w + h))
 		}
 	case 180: // vertical flipped
 		generator = func(_, y float64) float64 {
@@ -57,7 +59,36 @@ func (g *LinearGradient) Generate(iw, ih int) image.Image {
 	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
 }
 
-// Refresh causes this object to be redrawn in it's current state
+// Hide will set this gradient to not be visible
+func (g *LinearGradient) Hide() {
+	g.baseObject.Hide()
+
+	repaint(g)
+}
+
+// Move the gradient to a new position, relative to its parent / canvas
+func (g *LinearGradient) Move(pos fyne.Position) {
+	if g.Position() == pos {
+		return
+	}
+
+	g.baseObject.Move(pos)
+
+	repaint(g)
+}
+
+// Resize resizes the gradient to a new size.
+func (g *LinearGradient) Resize(size fyne.Size) {
+	if size == g.Size() {
+		return
+	}
+	g.baseObject.Resize(size)
+
+	// refresh needed to invalidate cached textures
+	g.Refresh()
+}
+
+// Refresh causes this gradient to be redrawn with its configured state.
 func (g *LinearGradient) Refresh() {
 	Refresh(g)
 }
@@ -106,7 +137,32 @@ func (g *RadialGradient) Generate(iw, ih int) image.Image {
 	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
 }
 
-// Refresh causes this object to be redrawn in it's current state
+// Hide will set this gradient to not be visible
+func (g *RadialGradient) Hide() {
+	g.baseObject.Hide()
+
+	repaint(g)
+}
+
+// Move the gradient to a new position, relative to its parent / canvas
+func (g *RadialGradient) Move(pos fyne.Position) {
+	g.baseObject.Move(pos)
+
+	repaint(g)
+}
+
+// Resize resizes the gradient to a new size.
+func (g *RadialGradient) Resize(size fyne.Size) {
+	if size == g.Size() {
+		return
+	}
+	g.baseObject.Resize(size)
+
+	// refresh needed to invalidate cached textures
+	g.Refresh()
+}
+
+// Refresh causes this gradient to be redrawn with its configured state.
 func (g *RadialGradient) Refresh() {
 	Refresh(g)
 }
@@ -161,7 +217,7 @@ func NewHorizontalGradient(start, end color.Color) *LinearGradient {
 	return g
 }
 
-// NewLinearGradient creates a linear gradient at a the specified angle.
+// NewLinearGradient creates a linear gradient at the specified angle.
 // The angle parameter is the degree angle along which the gradient is calculated.
 // A NewHorizontalGradient uses 270 degrees and NewVerticalGradient is 0 degrees.
 func NewLinearGradient(start, end color.Color, angle float64) *LinearGradient {

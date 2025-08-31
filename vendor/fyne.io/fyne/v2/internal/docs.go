@@ -2,6 +2,7 @@ package internal
 
 import (
 	"errors"
+	"net/url"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/storage"
@@ -17,7 +18,7 @@ type Docs struct {
 
 // Create will create a new document ready for writing, you must write something and close the returned writer
 // for the create process to complete.
-// If the document for this app with that name already exists an error will be returned.
+// If the document for this app with that name already exists a storage.ErrAlreadyExists error will be returned.
 func (d *Docs) Create(name string) (fyne.URIWriteCloser, error) {
 	if d.RootDocURI == nil {
 		return nil, errNoAppID
@@ -28,7 +29,7 @@ func (d *Docs) Create(name string) (fyne.URIWriteCloser, error) {
 		return nil, err
 	}
 
-	u, err := storage.Child(d.RootDocURI, name)
+	u, err := d.childURI(name)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (d *Docs) Create(name string) (fyne.URIWriteCloser, error) {
 		return nil, err
 	}
 	if exists {
-		return nil, errors.New("document with name " + name + " already exists")
+		return nil, storage.ErrAlreadyExists
 	}
 
 	return storage.Writer(u)
@@ -51,14 +52,17 @@ func (d *Docs) List() []string {
 		return nil
 	}
 
-	var ret []string
 	uris, err := storage.List(d.RootDocURI)
 	if err != nil {
-		return ret
+		return nil
 	}
 
-	for _, u := range uris {
-		ret = append(ret, u.Name())
+	ret := make([]string, len(uris))
+	for i, u := range uris {
+		ret[i] = u.Name()
+		if d.RootDocURI.Scheme() != "file" {
+			ret[i], _ = url.PathUnescape(u.Name())
+		}
 	}
 
 	return ret
@@ -70,7 +74,7 @@ func (d *Docs) Open(name string) (fyne.URIReadCloser, error) {
 		return nil, errNoAppID
 	}
 
-	u, err := storage.Child(d.RootDocURI, name)
+	u, err := d.childURI(name)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +88,7 @@ func (d *Docs) Remove(name string) error {
 		return errNoAppID
 	}
 
-	u, err := storage.Child(d.RootDocURI, name)
+	u, err := d.childURI(name)
 	if err != nil {
 		return err
 	}
@@ -93,13 +97,13 @@ func (d *Docs) Remove(name string) error {
 }
 
 // Save will open a document ready for writing, you close the returned writer for the save to complete.
-// If the document for this app with that name does not exist an error will be returned.
+// If the document for this app with that name does not exist a storage.ErrNotExists error will be returned.
 func (d *Docs) Save(name string) (fyne.URIWriteCloser, error) {
 	if d.RootDocURI == nil {
 		return nil, errNoAppID
 	}
 
-	u, err := storage.Child(d.RootDocURI, name)
+	u, err := d.childURI(name)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +113,7 @@ func (d *Docs) Save(name string) (fyne.URIWriteCloser, error) {
 		return nil, err
 	}
 	if !exists {
-		return nil, errors.New("document with name " + name + " does not exist")
+		return nil, storage.ErrNotExists
 	}
 
 	return storage.Writer(u)
@@ -125,4 +129,13 @@ func (d *Docs) ensureRootExists() error {
 	}
 
 	return storage.CreateListable(d.RootDocURI)
+}
+
+func (d *Docs) childURI(name string) (fyne.URI, error) {
+	encoded := name
+	if d.RootDocURI.Scheme() != "file" {
+		encoded = url.PathEscape(name)
+	}
+
+	return storage.Child(d.RootDocURI, encoded)
 }

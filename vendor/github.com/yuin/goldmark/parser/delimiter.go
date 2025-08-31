@@ -30,11 +30,11 @@ type Delimiter struct {
 	Segment text.Segment
 
 	// CanOpen is set true if this delimiter can open a span for a new node.
-	// See https://spec.commonmark.org/0.29/#can-open-emphasis for details.
+	// See https://spec.commonmark.org/0.30/#can-open-emphasis for details.
 	CanOpen bool
 
 	// CanClose is set true if this delimiter can close a span for a new node.
-	// See https://spec.commonmark.org/0.29/#can-open-emphasis for details.
+	// See https://spec.commonmark.org/0.30/#can-open-emphasis for details.
 	CanClose bool
 
 	// Length is a remaining length of this delimiter.
@@ -66,12 +66,12 @@ func (d *Delimiter) Dump(source []byte, level int) {
 
 var kindDelimiter = ast.NewNodeKind("Delimiter")
 
-// Kind implements Node.Kind
+// Kind implements Node.Kind.
 func (d *Delimiter) Kind() ast.NodeKind {
 	return kindDelimiter
 }
 
-// Text implements Node.Text
+// Text implements Node.Text.
 func (d *Delimiter) Text(source []byte) []byte {
 	return d.Segment.Value(source)
 }
@@ -111,7 +111,7 @@ func NewDelimiter(canOpen, canClose bool, length int, char byte, processor Delim
 }
 
 // ScanDelimiter scans a delimiter by given DelimiterProcessor.
-func ScanDelimiter(line []byte, before rune, min int, processor DelimiterProcessor) *Delimiter {
+func ScanDelimiter(line []byte, before rune, minimum int, processor DelimiterProcessor) *Delimiter {
 	i := 0
 	c := line[i]
 	j := i
@@ -120,13 +120,13 @@ func ScanDelimiter(line []byte, before rune, min int, processor DelimiterProcess
 	}
 	for ; j < len(line) && c == line[j]; j++ {
 	}
-	if (j - i) >= min {
+	if (j - i) >= minimum {
 		after := rune(' ')
 		if j != len(line) {
 			after = util.ToRune(line, j)
 		}
 
-		canOpen, canClose := false, false
+		var canOpen, canClose bool
 		beforeIsPunctuation := util.IsPunctRune(before)
 		beforeIsWhitespace := util.IsSpaceRune(before)
 		afterIsPunctuation := util.IsPunctRune(after)
@@ -162,15 +162,11 @@ func ProcessDelimiters(bottom ast.Node, pc Context) {
 	var closer *Delimiter
 	if bottom != nil {
 		if bottom != lastDelimiter {
-			for c := lastDelimiter.PreviousSibling(); c != nil; {
+			for c := lastDelimiter.PreviousSibling(); c != nil && c != bottom; {
 				if d, ok := c.(*Delimiter); ok {
 					closer = d
 				}
-				prev := c.PreviousSibling()
-				if prev == bottom {
-					break
-				}
-				c = prev
+				c = c.PreviousSibling()
 			}
 		}
 	} else {
@@ -189,7 +185,7 @@ func ProcessDelimiters(bottom ast.Node, pc Context) {
 		found := false
 		maybeOpener := false
 		var opener *Delimiter
-		for opener = closer.PreviousDelimiter; opener != nil; opener = opener.PreviousDelimiter {
+		for opener = closer.PreviousDelimiter; opener != nil && opener != bottom; opener = opener.PreviousDelimiter {
 			if opener.CanOpen && opener.Processor.CanOpenCloser(opener, closer) {
 				maybeOpener = true
 				consume = opener.CalcComsumption(closer)
@@ -200,10 +196,11 @@ func ProcessDelimiters(bottom ast.Node, pc Context) {
 			}
 		}
 		if !found {
+			next := closer.NextDelimiter
 			if !maybeOpener && !closer.CanOpen {
 				pc.RemoveDelimiter(closer)
 			}
-			closer = closer.NextDelimiter
+			closer = next
 			continue
 		}
 		opener.ConsumeCharacters(consume)

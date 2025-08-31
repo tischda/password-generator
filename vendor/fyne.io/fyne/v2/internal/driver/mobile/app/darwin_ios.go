@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin
-// +build ios
+//go:build darwin && ios
 
 package app
 
@@ -38,7 +37,6 @@ import (
 	"log"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -81,6 +79,10 @@ var screenScale int // [UIScreen mainScreen].scale, either 1, 2, or 3.
 var DisplayMetrics struct {
 	WidthPx  int
 	HeightPx int
+}
+
+func GoBack() {
+	// Apple do not permit apps to exit in any way other than user pressing home button / gesture
 }
 
 //export setDisplayMetrics
@@ -155,11 +157,6 @@ func updateConfig(width, height, orientation int32) {
 // touch events, while the iPad can handle 11.
 var touchIDs [11]uintptr
 
-var touchEvents struct {
-	sync.Mutex
-	pending []touch.Event
-}
-
 //export sendTouch
 func sendTouch(cTouch, cTouchType uintptr, x, y float32) {
 	id := -1
@@ -213,6 +210,11 @@ func lifecycleVisible() { theApp.sendLifecycle(lifecycle.StageVisible) }
 //export lifecycleFocused
 func lifecycleFocused() { theApp.sendLifecycle(lifecycle.StageFocused) }
 
+//export lifecycleMemoryWarning
+func lifecycleMemoryWarning() {
+	cleanCaches()
+}
+
 //export drawloop
 func drawloop() {
 	runtime.LockOSThread()
@@ -225,7 +227,7 @@ func drawloop() {
 		case <-theApp.publish:
 			theApp.publishResult <- PublishResult{}
 			return
-		case <-time.After(100 * time.Millisecond): // incase the method blocked!!
+		case <-time.After(100 * time.Millisecond): // in case the method blocked!!
 			return
 		}
 	}

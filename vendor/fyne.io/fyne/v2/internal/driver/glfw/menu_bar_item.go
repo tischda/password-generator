@@ -38,9 +38,10 @@ func (i *menuBarItem) Child() *publicWidget.Menu {
 //
 // Implements: fyne.Widget
 func (i *menuBarItem) CreateRenderer() fyne.WidgetRenderer {
-	background := canvas.NewRectangle(theme.HoverColor())
+	background := canvas.NewRectangle(theme.Color(theme.ColorNameHover))
+	background.CornerRadius = theme.SelectionRadiusSize()
 	background.Hide()
-	text := canvas.NewText(i.Menu.Label, theme.ForegroundColor())
+	text := canvas.NewText(i.Menu.Label, theme.Color(theme.ColorNameForeground))
 	objects := []fyne.CanvasObject{background, text}
 
 	return &menuBarItemRenderer{
@@ -148,7 +149,7 @@ func (r *menuBarItemRenderer) Layout(size fyne.Size) {
 	padding := r.padding()
 
 	r.text.TextSize = theme.TextSize()
-	r.text.Color = theme.ForegroundColor()
+	r.text.Color = theme.Color(theme.ColorNameForeground)
 	r.text.Resize(r.text.MinSize())
 	r.text.Move(fyne.NewPos(padding.Width/2, padding.Height/2))
 
@@ -160,11 +161,12 @@ func (r *menuBarItemRenderer) MinSize() fyne.Size {
 }
 
 func (r *menuBarItemRenderer) Refresh() {
+	r.background.CornerRadius = theme.SelectionRadiusSize()
 	if r.i.active && r.i.Parent.active {
-		r.background.FillColor = theme.FocusColor()
+		r.background.FillColor = theme.Color(theme.ColorNameFocus)
 		r.background.Show()
 	} else if r.i.hovered && !r.i.Parent.active {
-		r.background.FillColor = theme.HoverColor()
+		r.background.FillColor = theme.Color(theme.ColorNameHover)
 		r.background.Show()
 	} else {
 		r.background.Hide()
@@ -174,5 +176,5 @@ func (r *menuBarItemRenderer) Refresh() {
 }
 
 func (r *menuBarItemRenderer) padding() fyne.Size {
-	return fyne.NewSize(theme.Padding()*4, theme.Padding()*2)
+	return fyne.NewSize(theme.InnerPadding()*2, theme.InnerPadding())
 }

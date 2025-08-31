@@ -5,38 +5,45 @@ package app // import "fyne.io/fyne/v2/app"
 
 import (
 	"strconv"
-	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/internal"
 	"fyne.io/fyne/v2/internal/app"
 	intRepo "fyne.io/fyne/v2/internal/repository"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/storage/repository"
-
-	"golang.org/x/sys/execabs"
 )
 
 // Declare conformity with App interface
 var _ fyne.App = (*fyneApp)(nil)
 
 type fyneApp struct {
-	driver   fyne.Driver
-	icon     fyne.Resource
-	uniqueID string
+	driver    fyne.Driver
+	clipboard fyne.Clipboard
+	icon      fyne.Resource
+	uniqueID  string
 
-	lifecycle fyne.Lifecycle
+	cloud     fyne.CloudProvider
+	lifecycle app.Lifecycle
 	settings  *settings
-	storage   *store
+	storage   fyne.Storage
 	prefs     fyne.Preferences
+}
 
-	running  bool
-	runMutex sync.Mutex
-	exec     func(name string, arg ...string) *execabs.Cmd
+func (a *fyneApp) CloudProvider() fyne.CloudProvider {
+	return a.cloud
 }
 
 func (a *fyneApp) Icon() fyne.Resource {
-	return a.icon
+	if a.icon != nil {
+		return a.icon
+	}
+
+	if a.Metadata().Icon == nil || len(a.Metadata().Icon.Content()) == 0 {
+		return nil
+	}
+	return a.Metadata().Icon
 }
 
 func (a *fyneApp) SetIcon(icon fyne.Resource) {
@@ -47,8 +54,11 @@ func (a *fyneApp) UniqueID() string {
 	if a.uniqueID != "" {
 		return a.uniqueID
 	}
+	if a.Metadata().ID != "" {
+		return a.Metadata().ID
+	}
 
-	fyne.LogError("Preferences API requires a unique ID, use app.NewWithID()", nil)
+	fyne.LogError("Preferences API requires a unique ID, use app.NewWithID() or the FyneApp.toml ID field", nil)
 	a.uniqueID = "missing-id-" + strconv.FormatInt(time.Now().Unix(), 10) // This is a fake unique - it just has to not be reused...
 	return a.uniqueID
 }
@@ -58,15 +68,11 @@ func (a *fyneApp) NewWindow(title string) fyne.Window {
 }
 
 func (a *fyneApp) Run() {
-	a.runMutex.Lock()
+	go a.lifecycle.RunEventQueue(a.driver.DoFromGoroutine)
 
-	if a.running {
-		a.runMutex.Unlock()
-		return
+	if !a.driver.Device().IsMobile() {
+		a.settings.watchSettings()
 	}
-
-	a.running = true
-	a.runMutex.Unlock()
 
 	a.driver.Run()
 }
@@ -78,7 +84,6 @@ func (a *fyneApp) Quit() {
 
 	a.driver.Quit()
 	a.settings.stopWatching()
-	a.running = false
 }
 
 func (a *fyneApp) Driver() fyne.Driver {
@@ -95,46 +100,90 @@ func (a *fyneApp) Storage() fyne.Storage {
 }
 
 func (a *fyneApp) Preferences() fyne.Preferences {
-	if a.uniqueID == "" {
-		fyne.LogError("Preferences API requires a unique ID, use app.NewWithID()", nil)
+	if a.UniqueID() == "" {
+		fyne.LogError("Preferences API requires a unique ID, use app.NewWithID() or the FyneApp.toml ID field", nil)
 	}
 	return a.prefs
 }
 
 func (a *fyneApp) Lifecycle() fyne.Lifecycle {
-	return a.lifecycle
+	return &a.lifecycle
 }
 
-// New returns a new application instance with the default driver and no unique ID
+func (a *fyneApp) newDefaultPreferences() *preferences {
+	p := newPreferences(a)
+	if a.uniqueID != "" {
+		p.load()
+	}
+	return p
+}
+
+func (a *fyneApp) Clipboard() fyne.Clipboard {
+	return a.clipboard
+}
+
+// New returns a new application instance with the default driver and no unique ID (unless specified in FyneApp.toml)
 func New() fyne.App {
-	internal.LogHint("Applications should be created with a unique ID using app.NewWithID()")
-	return NewWithID("")
+	if meta.ID == "" {
+		checkLocalMetadata() // if no ID passed, check if it was in toml
+		if meta.ID == "" {
+			internal.LogHint("Applications should be created with a unique ID using app.NewWithID()")
+		}
+	}
+	return NewWithID(meta.ID)
 }
 
-func newAppWithDriver(d fyne.Driver, id string) fyne.App {
-	newApp := &fyneApp{uniqueID: id, driver: d, exec: execabs.Command, lifecycle: &app.Lifecycle{}}
-	fyne.SetCurrentApp(newApp)
-	newApp.settings = loadSettings()
-
-	newApp.prefs = newPreferences(newApp)
-	newApp.storage = &store{a: newApp}
-	if id != "" {
-		if pref, ok := newApp.prefs.(interface{ load() }); ok {
-			pref.load()
+func makeStoreDocs(id string, s *store) *internal.Docs {
+	if id == "" {
+		return &internal.Docs{} // an empty impl to avoid crashes
+	}
+	if root := s.a.storageRoot(); root != "" {
+		uri, err := storage.ParseURI(root)
+		if err != nil {
+			uri = storage.NewFileURI(root)
 		}
 
-		root, _ := newApp.storage.docRootURI()
-		newApp.storage.Docs = &internal.Docs{RootDocURI: root}
+		exists, err := storage.Exists(uri)
+		if !exists || err != nil {
+			err = storage.CreateListable(uri)
+			if err != nil {
+				fyne.LogError("Failed to create app storage space", err)
+			}
+		}
+
+		root, _ := s.docRootURI()
+		return &internal.Docs{RootDocURI: root}
 	} else {
-		newApp.storage.Docs = &internal.Docs{} // an empty impl to avoid crashes
+		return &internal.Docs{} // an empty impl to avoid crashes
 	}
+}
 
-	if !d.Device().IsMobile() {
-		newApp.settings.watchSettings()
-	}
+func newAppWithDriver(d fyne.Driver, clipboard fyne.Clipboard, id string) fyne.App {
+	newApp := &fyneApp{uniqueID: id, clipboard: clipboard, driver: d}
+	fyne.SetCurrentApp(newApp)
 
-	repository.Register("http", intRepo.NewHTTPRepository())
-	repository.Register("https", intRepo.NewHTTPRepository())
+	newApp.prefs = newApp.newDefaultPreferences()
+	newApp.lifecycle.InitEventQueue()
+	newApp.lifecycle.SetOnStoppedHookExecuted(func() {
+		if prefs, ok := newApp.prefs.(*preferences); ok {
+			prefs.forceImmediateSave()
+		}
+	})
 
+	newApp.registerRepositories() // for web this may provide docs / settings
+	newApp.settings = loadSettings()
+	store := &store{a: newApp}
+	store.Docs = makeStoreDocs(id, store)
+	newApp.storage = store
+
+	httpHandler := intRepo.NewHTTPRepository()
+	repository.Register("http", httpHandler)
+	repository.Register("https", httpHandler)
 	return newApp
+}
+
+// marker interface to pass system tray to supporting drivers
+type systrayDriver interface {
+	SetSystemTrayMenu(*fyne.Menu)
+	SetSystemTrayIcon(resource fyne.Resource)
 }

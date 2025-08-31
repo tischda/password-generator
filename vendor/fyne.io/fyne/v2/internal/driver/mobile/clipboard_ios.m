@@ -1,4 +1,4 @@
-// +build ios
+//go:build ios
 
 #import <UIKit/UIKit.h>
 #import <MobileCoreServices/MobileCoreServices.h>
@@ -11,5 +11,5 @@ void setClipboardContent(char *content) {
 char *getClipboardContent() {
     NSString *str = [[UIPasteboard generalPasteboard] string];
 
-    return [str UTF8String];
+    return (char *) [str UTF8String];
 }
