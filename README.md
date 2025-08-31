@@ -1,6 +1,10 @@
-# password-generator [![Test](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
+[![Build Status](https://github.com/tischda/password-generator/actions/workflows/build.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/build.yml)
+[![Test Status](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tischda/password-generator)](https://goreportcard.com/report/github.com/tischda/password-generator)
 
-Password generator written in [Go](https://www.golang.org).
+# password-generator
+
+Password generator written in go + fyne.
 
 ### Usage
 
