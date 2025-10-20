@@ -23,5 +23,7 @@ jobs:
 
     - name: Build
       run: |
+        ls -l
+        tree vendor
         go mod download
         GOOS=linux GOARCH=amd64 go build
