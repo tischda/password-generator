@@ -33,7 +33,7 @@ func processGUI(length int) {
 		} else {
 			passwordLength, _ := strconv.Atoi(input.Text)
 			text.Text = GeneratePassword(passwordLength)
-			w.Clipboard().SetContent(text.Text)
+			a.Clipboard().SetContent(text.Text)
 		}
 		text.Refresh()
 		resizeWindow(w)
@@ -43,7 +43,7 @@ func processGUI(length int) {
 		layout.NewVBoxLayout(),
 		layout.NewSpacer(),
 		title,
-		fyne.NewContainerWithLayout(layout.NewCenterLayout(), input),
+		container.New(layout.NewCenterLayout(), input),
 		text,
 		btn,
 		layout.NewSpacer())
