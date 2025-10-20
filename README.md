@@ -1,15 +1,19 @@
 [![Build Status](https://github.com/tischda/password-generator/actions/workflows/build.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/build.yml)
 [![Test Status](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tischda/password-generator)](https://goreportcard.com/report/github.com/tischda/password-generator)
+[![Coverage Status](https://coveralls.io/repos/tischda/password-generator/badge.svg)](https://coveralls.io/r/tischda/password-generator)
+[![Linter Status](https://github.com/tischda/password-generator/actions/workflows/linter.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/linter.yml)
+[![License](https://img.shields.io/github/license/tischda/password-generator)](/LICENSE)
+[![Release](https://img.shields.io/github/release/tischda/password-generator.svg)](https://github.com/tischda/password-generator/releases/latest)
 
 # password-generator
 
-Password generator written in go + fyne.
+Password generator written in Golang + Fyne.
+When using the GUI, the password is automaticaly copied to the clipboard.
 
-### Usage
+## Usage
 
 ~~~
-Usage: password-generator.exe [option]
+Usage: password-generator.exe [OPTIONS]
 
  OPTIONS:
   -gui
@@ -22,7 +26,7 @@ Usage: password-generator.exe [option]
         print version and exit
 ~~~
 
-Examples:
+## Examples
 
 ~~~
 $ password-generator
@@ -37,7 +41,7 @@ Inspired from:
 * https://github.com/gocoder-ai/password-generator
 * https://www.socketloop.com/tutorials/golang-how-to-generate-random-string
 
-### Compile:
+## Compile
 
 This project has a dependency on [Fyne](https://github.com/fyne-io/fyne).
 You need to install these additional packages:

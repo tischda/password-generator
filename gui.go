@@ -12,7 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func processGUI() {
+func processGUI(length int) {
 	a := app.New()
 	w := a.NewWindow("Password Generator")
 
@@ -20,7 +20,7 @@ func processGUI() {
 	title.Alignment = fyne.TextAlignCenter
 
 	input := widget.NewEntry()
-	input.Text = strconv.Itoa(*flag_length)
+	input.Text = strconv.Itoa(length)
 	input.Validator = lengthValidator
 
 	text := canvas.NewText("", color.White)
