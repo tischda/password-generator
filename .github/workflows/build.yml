@@ -19,6 +19,9 @@ jobs:
         go-version: stable
         cache: false # no point in caching if go.sum is absent
 
+    - name: Install OpenGL
+      run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils libgl1 libgl1-mesa-dev
+
     - name: Build
       run: |
-        GOOS=windows GOARCH=amd64 go build -mod=vendor
+        GOOS=windows GOARCH=amd64 go build
