@@ -14,7 +14,10 @@ func GeneratePassword(size int) (password string) {
 		return
 	}
 	var bytes = make([]byte, size)
-	rand.Read(bytes)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return err.Error()
+	}
 	for k, v := range bytes {
 		bytes[k] = dictionary[v%byte(len(dictionary))]
 	}
