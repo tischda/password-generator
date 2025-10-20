@@ -23,5 +23,4 @@ jobs:
 
     - name: Build
       run: |
-        go mod vendor
-        GOOS=linux GOARCH=amd64 go build
+        GOOS=linux GOARCH=amd64 go build -mod=vendor
