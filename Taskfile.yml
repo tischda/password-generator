@@ -70,7 +70,7 @@ tasks:
       - cat releaseinfo
       - echo ----
       - task: goversioninfo
-      - goreleaser release --clean --release-notes=releaseinfo
+      - release-from-container.cmd release --clean --release-notes=releaseinfo
       - rm -f releaseinfo
 
   dist:

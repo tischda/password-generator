@@ -7,14 +7,30 @@ before:
     - go mod vendor
 
 builds:
-  - env:
-      - CGO_ENABLED=0
+  - id: windows
     goos:
       - windows
     goarch:
       - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-w64-mingw32-gcc
+      - CXX=x86_64-w64-mingw32-g++
     ldflags:
       - -s -w -X main.name={{.ProjectName}} -X main.version={{.Tag}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+
+  - id: linux
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+    ldflags:
+      - -s -w -X main.name={{.ProjectName}} -X main.version={{.Tag}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+
 
 archives:   
   # make OS and Arch compatible with the results of `uname`

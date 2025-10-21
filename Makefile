@@ -84,7 +84,7 @@ release: goversioninfo
 	@sed '1,/\#\# \[${VERSION}/d;/^\#\# /Q' CHANGELOG.md > releaseinfo
 	@cat releaseinfo
 	@echo ----
-	@goreleaser release --clean --release-notes=releaseinfo
+	@release-from-container.cmd release --clean --release-notes=releaseinfo
 	@rm -f releaseinfo
 
 ## dist: clean and build
