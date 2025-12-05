@@ -69,3 +69,19 @@ sudo yum install mesa-dri-drivers mesa-libGL-devel libXcursor-devel libXrandr-de
 ~~~
 
 libXxf86vm-devel is only available in the CodeReady Linux Builder (CRB) repository.
+
+Windows:
+~~~
+winget install --id BrechtSanders.WinLibs.POSIX.UCRT
+
+set CGO_ENABLED=1
+set GOOS=windows
+set GOARCH=amd64 
+
+make build
+~~~
+
+The first build take several minutes, be patient!
+
+I couldn't get it to work with fyne-cross (no console output).
+

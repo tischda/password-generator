@@ -1,4 +1,4 @@
-# fyne.io/fyne/v2 v2.7.0
+# fyne.io/fyne/v2 v2.7.1
 ## explicit; go 1.19
 fyne.io/fyne/v2
 fyne.io/fyne/v2/app
@@ -98,7 +98,7 @@ github.com/go-gl/glfw/v3.3/glfw/glfw/src
 # github.com/go-text/render v0.2.0
 ## explicit; go 1.17
 github.com/go-text/render
-# github.com/go-text/typesetting v0.3.0
+# github.com/go-text/typesetting v0.3.1
 ## explicit; go 1.19
 github.com/go-text/typesetting/di
 github.com/go-text/typesetting/font
@@ -112,8 +112,8 @@ github.com/go-text/typesetting/language
 github.com/go-text/typesetting/segmenter
 github.com/go-text/typesetting/shaping
 github.com/go-text/typesetting/unicodedata
-# github.com/godbus/dbus/v5 v5.1.0
-## explicit; go 1.12
+# github.com/godbus/dbus/v5 v5.2.0
+## explicit; go 1.20
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
@@ -174,7 +174,7 @@ github.com/yuin/goldmark/renderer
 github.com/yuin/goldmark/renderer/html
 github.com/yuin/goldmark/text
 github.com/yuin/goldmark/util
-# golang.org/x/image v0.32.0
+# golang.org/x/image v0.33.0
 ## explicit; go 1.24.0
 golang.org/x/image/ccitt
 golang.org/x/image/colornames
@@ -184,17 +184,17 @@ golang.org/x/image/math/fixed
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
 golang.org/x/image/vector
-# golang.org/x/net v0.46.0
+# golang.org/x/net v0.47.0
 ## explicit; go 1.24.0
 golang.org/x/net/html
 golang.org/x/net/html/atom
 golang.org/x/net/html/charset
-# golang.org/x/sys v0.37.0
+# golang.org/x/sys v0.38.0
 ## explicit; go 1.24.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/text v0.30.0
+# golang.org/x/text v0.31.0
 ## explicit; go 1.24.0
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
