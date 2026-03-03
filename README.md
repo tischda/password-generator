@@ -2,7 +2,7 @@
 [![Test Status](https://github.com/tischda/password-generator/actions/workflows/test.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/test.yml)
 [![Coverage Status](https://coveralls.io/repos/tischda/password-generator/badge.svg)](https://coveralls.io/r/tischda/password-generator)
 [![Linter Status](https://github.com/tischda/password-generator/actions/workflows/linter.yml/badge.svg)](https://github.com/tischda/password-generator/actions/workflows/linter.yml)
-[![License](https://img.shields.io/github/license/tischda/password-generator)](/LICENSE)
+[![License](https://img.shields.io/github/license/tischda/password-generator.svg)](/LICENSE)
 [![Release](https://img.shields.io/github/release/tischda/password-generator.svg)](https://github.com/tischda/password-generator/releases/latest)
 
 # password-generator
