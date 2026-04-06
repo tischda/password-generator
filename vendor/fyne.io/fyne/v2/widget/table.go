@@ -588,16 +588,16 @@ func (t *Table) Tapped(e *fyne.PointEvent) {
 	if row == noCellMatch || row < 0 {
 		return // out of row range
 	}
-	t.Select(TableCellID{row, col})
 
 	if !fyne.CurrentDevice().IsMobile() {
 		t.RefreshItem(t.currentFocus)
-		canvas := fyne.CurrentApp().Driver().CanvasForObject(t)
+		canvas := fyne.CurrentApp().Driver().CanvasForObject(t.super())
 		if canvas != nil {
-			canvas.Focus(t.impl.(fyne.Focusable))
+			canvas.Focus(t.super().(fyne.Focusable))
 		}
 		t.RefreshItem(t.currentFocus)
 	}
+	t.Select(TableCellID{row, col})
 }
 
 // columnAt returns a positive integer (or 0) for the column that is found at the `pos` X position.
