@@ -21,7 +21,7 @@ jobs:
         cache: false # no point in caching if go.sum is absent
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
     #     args: --output.html.path=lint-report.html || echo "Lint issues found"
